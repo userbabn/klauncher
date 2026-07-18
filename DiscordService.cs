@@ -81,7 +81,7 @@ namespace klauncher
                 details: "GTA V - VMP Edition",
                 state: "In the main menu",
                 largeImageKey: "klauncher_logo",
-                largeImageText: "KLAUNCHER by Koala Gamer",
+                largeImageText: "KLAUNCHER by userbabn",
                 smallImageKey: "gta_logo",
                 smallImageText: "GTA V VMP Edition"
             );
@@ -94,7 +94,7 @@ namespace klauncher
                 details: "Downloading GTA V VMP Edition",
                 state: $"Part {currentPart}/{totalParts} \u2022 {speed}",
                 largeImageKey: "klauncher_logo",
-                largeImageText: "KLAUNCHER by Koala Gamer",
+                largeImageText: "KLAUNCHER by userbabn",
                 smallImageKey: "gta_logo",
                 smallImageText: "Downloading..."
             );
@@ -113,7 +113,7 @@ namespace klauncher
                 details: "Downloading GTA V VMP Edition",
                 state: $"Part {currentPart}/{totalParts} \u2022 {speed}{etaStr}",
                 largeImageKey: "klauncher_logo",
-                largeImageText: "KLAUNCHER by Koala Gamer",
+                largeImageText: "KLAUNCHER by userbabn",
                 smallImageKey: "gta_logo",
                 smallImageText: "Downloading..."
             );
@@ -126,7 +126,7 @@ namespace klauncher
                 details: "GTA V - VMP Edition",
                 state: "Download paused",
                 largeImageKey: "klauncher_logo",
-                largeImageText: "KLAUNCHER by Koala Gamer",
+                largeImageText: "KLAUNCHER by userbabn",
                 smallImageKey: "gta_logo",
                 smallImageText: "Paused"
             );
@@ -139,7 +139,7 @@ namespace klauncher
                 details: "Extracting GTA V VMP Edition",
                 state: $"Extracting files... {percentage:F0}%",
                 largeImageKey: "klauncher_logo",
-                largeImageText: "KLAUNCHER by Koala Gamer",
+                largeImageText: "KLAUNCHER by userbabn",
                 smallImageKey: "gta_logo",
                 smallImageText: "Extracting RAR..."
             );
@@ -165,7 +165,7 @@ namespace klauncher
                 details: "GTA V - VMP Edition",
                 state: "Installation completed",
                 largeImageKey: "klauncher_logo",
-                largeImageText: "KLAUNCHER by Koala Gamer",
+                largeImageText: "KLAUNCHER by userbabn",
                 smallImageKey: "gta_logo",
                 smallImageText: "Ready to play"
             );

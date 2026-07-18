@@ -11,7 +11,7 @@ An open-source Windows launcher for **GTA V VMP Edition**, built with **C# / WPF
 
 ### Features
 
-- **Modern Premium UI** - Borderless window with glassmorphism effects, neon purple/pink gradients, custom title bar, animated Koala Gamer logo with dynamic glow
+- **Modern Premium UI** - Borderless window with glassmorphism effects, neon purple/pink gradients, custom title bar, animated userbabn logo with dynamic glow
 - **Download Manager with Pause/Resume** - Sequential download of 29 RAR parts (~70 GB total) with per-byte resume capability. Auto-resumes on launcher restart
 - **Animated Download Indicator** - Pulsing LED status dot and animated cloud download icon clearly show active download state
 - **Automatic Extraction** - Extracts all RAR parts using SharpCompress with optimized 256 KB buffers. RAR files are auto-deleted after extraction (~70 GB freed)
@@ -73,7 +73,7 @@ klauncher/
 
 ### License
 
-MIT License - Copyright (c) 2026 Koala Gamer
+MIT License - Copyright (c) 2026 userbabn
 
 ---
 
@@ -146,7 +146,7 @@ klauncher/
 
 ### لایسنس
 
-لایسنس MIT - کپی‌رایت (c) 2026 Koala Gamer
+لایسنس MIT - کپی‌رایت (c) 2026 userbabn
 
 ---
 
