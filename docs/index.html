@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KLAUNCHER - GTA V VMP Edition</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0a0918;
+            color: #e0dce8;
+            overflow-x: hidden;
+        }
+
+        /* Animated background */
+        .bg-glow {
+            position: fixed;
+            top: -30%;
+            left: -10%;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(111,66,193,0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: float 8s ease-in-out infinite;
+            z-index: 0;
+            pointer-events: none;
+        }
+        .bg-glow-2 {
+            position: fixed;
+            bottom: -20%;
+            right: -10%;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(240,71,100,0.12) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: float 10s ease-in-out infinite reverse;
+            z-index: 0;
+            pointer-events: none;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-30px) scale(1.05); }
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 0 24px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Nav */
+        nav {
+            padding: 20px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+        }
+        .nav-logo span {
+            font-weight: 800;
+            font-size: 18px;
+            color: #fff;
+            letter-spacing: 3px;
+        }
+        .nav-links {
+            display: flex;
+            gap: 24px;
+            align-items: center;
+        }
+        .nav-links a {
+            color: #a5a1c0;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        .nav-links a:hover { color: #fff; }
+        .btn-discord {
+            background: #5865F2;
+            color: #fff !important;
+            padding: 8px 18px;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+        .btn-discord:hover { background: #4752c4; }
+
+        /* Hero */
+        .hero {
+            text-align: center;
+            padding: 80px 0 60px;
+        }
+        .hero-badge {
+            display: inline-block;
+            background: rgba(111,66,193,0.15);
+            border: 1px solid rgba(111,66,193,0.3);
+            color: #a878ff;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 24px;
+        }
+        .hero h1 {
+            font-size: 56px;
+            font-weight: 900;
+            color: #fff;
+            line-height: 1.1;
+            margin-bottom: 8px;
+        }
+        .hero h1 .gta { color: #f04764; }
+        .hero .subtitle {
+            font-size: 18px;
+            color: #8a85a0;
+            max-width: 500px;
+            margin: 0 auto 36px;
+            line-height: 1.6;
+        }
+        .hero-buttons {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #f04764, #d63450);
+            color: #fff;
+            padding: 16px 36px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 16px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(240,71,100,0.3);
+        }
+        .btn-secondary {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #fff;
+            padding: 16px 36px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 16px;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .btn-secondary:hover { background: rgba(255,255,255,0.1); }
+
+        /* Stats */
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 48px;
+            padding: 40px 0;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .stat { text-align: center; }
+        .stat-number {
+            font-size: 32px;
+            font-weight: 800;
+            color: #a878ff;
+        }
+        .stat-label {
+            font-size: 13px;
+            color: #6a6486;
+            margin-top: 4px;
+        }
+
+        /* Features */
+        .features {
+            padding: 80px 0;
+        }
+        .section-title {
+            text-align: center;
+            font-size: 36px;
+            font-weight: 800;
+            color: #fff;
+            margin-bottom: 12px;
+        }
+        .section-subtitle {
+            text-align: center;
+            color: #6a6486;
+            font-size: 16px;
+            margin-bottom: 50px;
+        }
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        .feature-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 12px;
+            padding: 28px;
+            transition: border-color 0.3s, transform 0.3s;
+        }
+        .feature-card:hover {
+            border-color: rgba(111,66,193,0.4);
+            transform: translateY(-4px);
+        }
+        .feature-icon {
+            width: 44px;
+            height: 44px;
+            background: rgba(111,66,193,0.15);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            margin-bottom: 16px;
+        }
+        .feature-card h3 {
+            font-size: 16px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+        .feature-card p {
+            font-size: 14px;
+            color: #8a85a0;
+            line-height: 1.6;
+        }
+
+        /* How it works */
+        .how-it-works {
+            padding: 60px 0 80px;
+        }
+        .steps {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .step {
+            flex: 1;
+            min-width: 200px;
+            max-width: 280px;
+            text-align: center;
+            padding: 24px;
+        }
+        .step-number {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #6f42c1, #a878ff);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 800;
+            color: #fff;
+            margin: 0 auto 16px;
+        }
+        .step h3 {
+            font-size: 16px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 6px;
+        }
+        .step p {
+            font-size: 13px;
+            color: #6a6486;
+            line-height: 1.5;
+        }
+
+        /* Download section */
+        .download-section {
+            padding: 60px 0 80px;
+            text-align: center;
+        }
+        .download-cards {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .download-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            padding: 30px;
+            min-width: 260px;
+            text-align: center;
+            transition: border-color 0.3s;
+        }
+        .download-card:hover {
+            border-color: rgba(111,66,193,0.5);
+        }
+        .download-card.recommended {
+            border-color: rgba(240,71,100,0.4);
+            position: relative;
+        }
+        .download-card.recommended::before {
+            content: 'RECOMMENDED';
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #f04764, #d63450);
+            color: #fff;
+            padding: 3px 12px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+        .download-card h3 {
+            font-size: 18px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+        .download-card .size {
+            font-size: 13px;
+            color: #6a6486;
+            margin-bottom: 20px;
+        }
+        .download-card a {
+            display: inline-block;
+            background: linear-gradient(135deg, #6f42c1, #a878ff);
+            color: #fff;
+            padding: 12px 32px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 700;
+            font-size: 14px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .download-card a:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(111,66,193,0.3);
+        }
+
+        /* Requirements */
+        .requirements {
+            padding: 40px 0;
+            border-top: 1px solid rgba(255,255,255,0.06);
+        }
+        .req-grid {
+            display: flex;
+            gap: 32px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .req-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #8a85a0;
+            font-size: 14px;
+        }
+        .req-item .check {
+            color: #2ecc71;
+            font-size: 18px;
+        }
+
+        /* Footer */
+        footer {
+            padding: 40px 0;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            text-align: center;
+        }
+        footer p {
+            color: #4a4560;
+            font-size: 13px;
+        }
+        footer a {
+            color: #6f42c1;
+            text-decoration: none;
+        }
+
+        /* Pulse animation */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .pulse { animation: pulse 2s ease-in-out infinite; }
+    </style>
+</head>
+<body>
+
+<div class="bg-glow"></div>
+<div class="bg-glow-2"></div>
+
+<div class="container">
+    <!-- Nav -->
+    <nav>
+        <a class="nav-logo" href="#">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="11" stroke="#6f42c1" stroke-width="2"/>
+                <circle cx="9" cy="10" r="1.5" fill="#a878ff"/>
+                <circle cx="15" cy="10" r="1.5" fill="#a878ff"/>
+                <path d="M8 15c1.5 2 6.5 2 8 0" stroke="#a878ff" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <span>KLAUNCHER</span>
+        </a>
+        <div class="nav-links">
+            <a href="#features">Features</a>
+            <a href="#download">Download</a>
+            <a href="https://github.com/userbabn/klauncher" target="_blank">GitHub</a>
+            <a href="https://discord.gg/ekhkHWQbr2" target="_blank" class="btn-discord">Discord</a>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero">
+        <div class="hero-badge">v2.1 - Parallel Downloads</div>
+        <h1>GTA V<br><span class="gta">VMP Edition</span></h1>
+        <p class="subtitle">Download, extract, and launch GTA V VMP Edition with one click. Built with love by Koala Gamer.</p>
+        <div class="hero-buttons">
+            <a href="https://github.com/userbabn/klauncher/releases/download/v2.1/KLAUNCHER-x64.exe" class="btn-primary">
+                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                Download for Windows
+            </a>
+            <a href="https://github.com/userbabn/klauncher" class="btn-secondary">
+                <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                View on GitHub
+            </a>
+        </div>
+    </section>
+
+    <!-- Stats -->
+    <div class="stats">
+        <div class="stat">
+            <div class="stat-number">70 GB</div>
+            <div class="stat-label">Game Size</div>
+        </div>
+        <div class="stat">
+            <div class="stat-number">x4</div>
+            <div class="stat-label">Parallel Downloads</div>
+        </div>
+        <div class="stat">
+            <div class="stat-number">29</div>
+            <div class="stat-label">Auto-extracted Parts</div>
+        </div>
+        <div class="stat">
+            <div class="stat-number">1-Click</div>
+            <div class="stat-label">Install & Play</div>
+        </div>
+    </div>
+
+    <!-- Features -->
+    <section class="features" id="features">
+        <h2 class="section-title">Why KLAUNCHER?</h2>
+        <p class="section-subtitle">Everything you need to play GTA V VMP Edition</p>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon"><span class="pulse">&#9889;</span></div>
+                <h3>Parallel Downloads</h3>
+                <p>Downloads 4 parts simultaneously for maximum speed. Resume from where you left off anytime.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#128274;</div>
+                <h3>Auto Resume</h3>
+                <p>Close and reopen the launcher anytime. It detects your progress and resumes automatically.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#128230;</div>
+                <h3>Auto Extract</h3>
+                <p>After download, RAR files are extracted automatically. All 70GB of RAR files are deleted to free space.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#127918;</div>
+                <h3>Discord Rich Presence</h3>
+                <p>Show your friends what you're doing in real-time: downloading, extracting, or playing GTA V.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#9881;</div>
+                <h3>Prerequisites Installer</h3>
+                <p>One-click silent install of DirectX 11 and Visual C++ Redistributable. No manual setup needed.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">&#128736;</div>
+                <h3>Premium UI</h3>
+                <p>Beautiful dark theme with glassmorphism effects, neon gradients, and smooth animations.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="how-it-works">
+        <h2 class="section-title">How It Works</h2>
+        <p class="section-subtitle">Three steps to play</p>
+        <div class="steps">
+            <div class="step">
+                <div class="step-number">1</div>
+                <h3>Download KLAUNCHER</h3>
+                <p>Get the launcher from GitHub. No installation needed, just run the .exe file.</p>
+            </div>
+            <div class="step">
+                <div class="step-number">2</div>
+                <h3>Click Install</h3>
+                <p>Choose a folder and click "Download". The launcher handles everything: download, extract, and cleanup.</p>
+            </div>
+            <div class="step">
+                <div class="step-number">3</div>
+                <h3>Play</h3>
+                <p>Once extraction completes, click "Play" and enjoy GTA V VMP Edition!</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Download -->
+    <section class="download-section" id="download">
+        <h2 class="section-title">Download KLAUNCHER</h2>
+        <p class="section-subtitle">Free, open-source, no ads</p>
+        <div class="download-cards">
+            <div class="download-card recommended">
+                <h3>Windows 64-bit</h3>
+                <p class="size">160 MB &bull; Self-contained</p>
+                <a href="https://github.com/userbabn/klauncher/releases/download/v2.1/KLAUNCHER-x64.exe">Download x64</a>
+            </div>
+            <div class="download-card">
+                <h3>Windows 32-bit</h3>
+                <p class="size">151 MB &bull; Self-contained</p>
+                <a href="https://github.com/userbabn/klauncher/releases/download/v2.1/KLAUNCHER-x86.exe">Download x86</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Requirements -->
+    <section class="requirements">
+        <div class="req-grid">
+            <div class="req-item"><span class="check">&#10003;</span> Windows 10/11</div>
+            <div class="req-item"><span class="check">&#10003;</span> No .NET required</div>
+            <div class="req-item"><span class="check">&#10003;</span> 140 GB free disk space</div>
+            <div class="req-item"><span class="check">&#10003;</span> Stable internet connection</div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <p>KLAUNCHER by <a href="https://github.com/userbabn" target="_blank">Koala Gamer</a> &bull; MIT License &bull; <a href="https://discord.gg/ekhkHWQbr2" target="_blank">Discord</a></p>
+    </footer>
+</div>
+
+</body>
+</html>
