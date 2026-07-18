@@ -64,6 +64,9 @@ namespace klauncher
                         IconPause.Visibility       = Visibility.Visible;
                         IconPlay.Visibility        = Visibility.Collapsed;
                         BtnPause.IsEnabled         = true;
+                        ActiveDotGrid.Visibility   = Visibility.Visible;
+                        PausedDotGrid.Visibility   = Visibility.Collapsed;
+                        PulsingDot.Fill            = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString("#00bcd4");
                         break;
 
                     case LauncherState.Paused:
@@ -74,6 +77,8 @@ namespace klauncher
                         BtnPause.IsEnabled         = true;
                         TxtSpeed.Text              = "Pausado";
                         TxtEta.Text                = "—";
+                        ActiveDotGrid.Visibility   = Visibility.Collapsed;
+                        PausedDotGrid.Visibility   = Visibility.Visible;
                         break;
 
                     case LauncherState.Extracting:
@@ -81,9 +86,14 @@ namespace klauncher
                         BtnPause.IsEnabled         = false;
                         TxtSpeed.Text              = "Extrayendo…";
                         TxtEta.Text                = "";
+                        ActiveDotGrid.Visibility   = Visibility.Visible;
+                        PausedDotGrid.Visibility   = Visibility.Collapsed;
+                        PulsingDot.Fill            = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString("#e91e63");
                         break;
 
                     case LauncherState.Completed:
+                        ActiveDotGrid.Visibility   = Visibility.Collapsed;
+                        PausedDotGrid.Visibility   = Visibility.Collapsed;
                         InstallationFinished?.Invoke();
                         break;
 
@@ -91,6 +101,8 @@ namespace klauncher
                         BtnPause.IsEnabled         = false;
                         TxtSpeed.Text              = "Error";
                         TxtEta.Text                = "";
+                        ActiveDotGrid.Visibility   = Visibility.Collapsed;
+                        PausedDotGrid.Visibility   = Visibility.Collapsed;
                         break;
                 }
             });

@@ -36,9 +36,21 @@ namespace klauncher
             // Close-confirmation and cleanup
             Closing += MainWindow_Closing;
             Closed  += MainWindow_Closed;
+            Loaded  += MainWindow_Loaded;
         }
 
         // ── Close Handling ────────────────────────────────────────────────────────
+
+        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            var saved = _launcherService.GetSavedState();
+            if (saved != null && !string.IsNullOrEmpty(saved.TargetFolder) && saved.CompletedParts < 29)
+            {
+                // Auto-resume download
+                ShowInstallScreen(); // This sets panel visibilities
+                InstallCtrl_StartInstallation(saved.TargetFolder);
+            }
+        }
 
         private void MainWindow_Closing(object? sender, CancelEventArgs e)
         {

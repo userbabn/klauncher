@@ -99,8 +99,13 @@ namespace klauncher
         }
 
         // ── State File Helpers ───────────────────────────────────────────────────
-        private static string GetStateFilePath(string targetFolder) =>
-            Path.Combine(targetFolder, StateFileName);
+        private static string GetStateFilePath() =>
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, StateFileName);
+
+        public DownloadState? GetSavedState()
+        {
+            return LoadState();
+        }
 
         private void SaveState(string targetFolder)
         {
@@ -113,16 +118,16 @@ namespace klauncher
                     SessionStart         = DateTime.UtcNow,
                     TargetFolder         = targetFolder
                 };
-                File.WriteAllText(GetStateFilePath(targetFolder), JsonSerializer.Serialize(st));
+                File.WriteAllText(GetStateFilePath(), JsonSerializer.Serialize(st));
             }
             catch { /* ignore write errors */ }
         }
 
-        private DownloadState? LoadState(string targetFolder)
+        private DownloadState? LoadState()
         {
             try
             {
-                string path = GetStateFilePath(targetFolder);
+                string path = GetStateFilePath();
                 if (!File.Exists(path)) return null;
                 var json = File.ReadAllText(path);
                 return JsonSerializer.Deserialize<DownloadState>(json);
@@ -130,11 +135,11 @@ namespace klauncher
             catch { return null; }
         }
 
-        private void DeleteState(string targetFolder)
+        private void DeleteState()
         {
             try
             {
-                string path = GetStateFilePath(targetFolder);
+                string path = GetStateFilePath();
                 if (File.Exists(path)) File.Delete(path);
             }
             catch { }
@@ -183,7 +188,7 @@ namespace klauncher
             _cancelRequested = false;
 
             // Try to resume from persisted state
-            var saved = LoadState(targetFolder);
+            var saved = LoadState();
             if (saved != null && saved.CompletedParts > 0)
             {
                 _completedParts       = saved.CompletedParts;
@@ -226,7 +231,7 @@ namespace klauncher
                 bool extractSuccess = await ExtractAllPartsAsync(targetFolder);
                 if (extractSuccess)
                 {
-                    DeleteState(targetFolder);  // clean up persisted state
+                    DeleteState();  // clean up persisted state
                     State = LauncherState.Completed;
                     StatusMessageChanged?.Invoke("¡Instalación completada con éxito!");
                 }
@@ -328,6 +333,11 @@ namespace klauncher
                     appendMode ? FileMode.Append : FileMode.Create,
                     FileAccess.Write, FileShare.None, BufferSize, true);
 
+                if (!appendMode && contentLength.HasValue)
+                {
+                    fileStream.SetLength(contentLength.Value); // Pre-allocate to reduce fragmentation
+                }
+
                 byte[] buffer             = new byte[BufferSize];
                 int    bytesRead;
                 long   currentBytesDownloaded = existingLength;
@@ -428,9 +438,14 @@ namespace klauncher
                                 Directory.CreateDirectory(directory);
 
                             using var entryStream = entry.OpenEntryStream();
-                            using var fileStream  = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                            using var fileStream  = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, 262144, true);
 
-                            byte[]    buffer              = new byte[65536];
+                            if (entry.Size > 0)
+                            {
+                                fileStream.SetLength(entry.Size); // Pre-allocate to reduce fragmentation
+                            }
+
+                            byte[]    buffer              = new byte[262144]; // Increased to 256KB for faster copy
                             int       read;
                             long      entryBytesWritten   = 0;
                             var       progressStopwatch   = Stopwatch.StartNew();

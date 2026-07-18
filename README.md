@@ -1,89 +1,139 @@
-# KLAUNCHER: Lanzador de GTA V + VMP Edition 🐨🎮
+# KLAUNCHER: GTA V + VMP Edition 🐨🎮
+
+[Español](#es) | [English](#en) | [فارسی](#fa)
+
+---
+
+<a name="es"></a>
+## 🇪🇸 Español
 
 Lanzador (Launcher) de código abierto para Windows desarrollado en C# y WPF bajo **.NET 10**. Permite a los usuarios descargar, verificar y descomprimir de manera totalmente automatizada el instalador dividido en 29 partes de GTA V (VMP Edition), así como instalar los requisitos del juego.
 
----
+### 🎨 Características Principales
+*   **Diseño Premium y Moderno:** Interfaz sin bordes (Borderless Window) con efectos de cristal, gradientes morados y rosa neón, barra de título personalizada para arrastrar, logo de un **Koala Gamer** con iluminación de sombra dinámica e indicadores visuales de descarga LED neón animados.
+*   **Gestor de Descargas con Pausa, Resumen y Auto-reanudación:** Descarga secuencial de las 29 partes de 2.4 GB (~70 GB en total). Si se cae la conexión o el usuario pulsa **Pausar**, la descarga se puede reanudar desde el byte exacto donde se detuvo. Al cerrar y reabrir el launcher, este detecta el progreso e inicia la descarga automáticamente.
+*   **Optimizaciones de I/O de Alto Rendimiento:** Pre-asignación de tamaño de archivos en disco al descargar y extraer para reducir la fragmentación en HDDs e incrementar las velocidades de escritura.
+*   **Descompresión y Limpieza Automática:** Al finalizar la descarga, descomprime automáticamente la secuencia completa usando la librería `SharpCompress` con buffers optimizados a 256 KB. **Los archivos `.rar` son eliminados automáticamente** al terminar la extracción, recuperando ~70 GB de espacio.
+*   **Discord Rich Presence:** Muestra en tiempo real el estado del launcher en Discord: menú principal, descargando (con parte actual, velocidad y tiempo restante), extrayendo, jugando o completado.
+*   **Instalador de Requisitos:** Automatiza la descarga e instalación silenciosa de DirectX 11 Runtime y Visual C++ Redistributable 2015-2022.
 
-## 🎨 Características Principales
-*   **Diseño Premium y Moderno:** Interfaz sin bordes (Borderless Window) con efectos de cristal, gradientes morados y rosa neón, barra de título personalizada para arrastrar y un logo de un **Koala Gamer** con iluminación de sombra dinámica.
-*   **Gestor de Descargas con Pausa y Resumen:** Descarga secuencial de las 29 partes de 2.4 GB (~70 GB en total). Si se cae la conexión o el usuario pulsa **Pausar**, la descarga se puede reanudar desde el byte exacto donde se detuvo gracias a las peticiones parciales HTTP (`Range: bytes=`).
-*   **Descompresión y Limpieza Automática:** Al finalizar la descarga, descomprime automáticamente la secuencia completa (desde `part01.rar` hasta `part29.rar`) usando la librería nativa de alto rendimiento `SharpCompress` e informa del progreso archivo por archivo. **Los archivos `.rar` son eliminados automáticamente** al terminar la extracción, recuperando ~70 GB de espacio.
-*   **Discord Rich Presence:** Muestra en tiempo real el estado del launcher en Discord: menú principal, descargando (con parte actual y velocidad), extrayendo, jugando o completado. Requiere crear una aplicación en el [Discord Developer Portal](https://discord.com/developers/applications) y configurar el `CLIENT_ID` en `DiscordService.cs`.
-*   **Ícono personalizado:** El ejecutable `.exe` y la ventana de la aplicación muestran el logo del Koala Gamer como ícono.
-*   **Instalador de Requisitos:** Automatiza la descarga e instalación silenciosa de pre-requisitos necesarios para jugar:
-    *   Microsoft DirectX 11 Runtime
-    *   Visual C++ Redistributable 2015-2022
-*   **Sección de Noticias:** Slider de novedades interactivo con un paginador (`◀` y `▶`) para mantener informados a los usuarios.
-*   **Autocontenido:** Se puede compilar en un único archivo ejecutable `.exe` independiente de unos 70 MB con todas las imágenes, librerías e iconos integrados dentro del mismo binario.
-
----
-
-## 📂 Estructura del Código Fuente
-El código está organizado de forma modular dentro de las siguientes clases:
-*   `klauncher.csproj`: Definición del proyecto, uso del SDK de WindowsDesktop para WPF, y dependencias (SharpCompress).
-*   `LauncherService.cs`: Lógica de negocio de bajo nivel (HttpClient por bloques, streams de extracción de archivos con SharpCompress, y procesos de ejecución de instaladores de pre-requisitos).
-*   `MainWindow.xaml` / `.xaml.cs`: Estructura del shell principal, barra superior, menú lateral y lógica del carrusel de noticias.
-*   `InstallControl.xaml` / `.xaml.cs`: Componente del instalador (selección de carpeta con el selector de Windows, verificación de espacio y menú de requisitos).
-*   `DownloadProgressControl.xaml` / `.xaml.cs`: Barra de progreso de descarga/extracción, cálculo de velocidad en tiempo real y controlador de pausa/reanudar.
-*   `ConfirmDialog.xaml` / `.xaml.cs`: Cuadro de diálogo modal estético para confirmar la descarga de alta capacidad.
-*   `koala_logo.png`: Recurso gráfico de la marca embebido dentro del ejecutable.
-
----
-
-## 🛠️ Requisitos de Desarrollo
-Para abrir, modificar o compilar este código fuente en tu máquina necesitas:
+### 🛠️ Requisitos de Desarrollo
 *   **Windows OS** (10 u 11 recomendado).
 *   **.NET 10 SDK** o superior instalado.
-*   Visual Studio 2022 (con carga de trabajo de desarrollo de escritorio de .NET) o VS Code con C# Dev Kit.
+*   Visual Studio 2022 o VS Code con C# Dev Kit.
 
----
+### 🚀 Instrucciones Paso a Paso para Compilar y Ejecutar
 
-## 🚀 Instrucciones Paso a Paso para Compilar y Ejecutar
-
-### 1. Clonar el repositorio
-Abre una terminal y clona el proyecto en tu carpeta de preferencia.
-
-### 2. Restaurar dependencias de NuGet
-Ejecuta el siguiente comando para descargar los paquetes externos necesarios (como SharpCompress):
+#### 1. Clonar el repositorio
+```powershell
+git clone https://github.com/userbabn/klauncher.git
+```
+#### 2. Restaurar dependencias de NuGet
 ```powershell
 dotnet restore
 ```
-
-### 3. Ejecutar en modo desarrollo
-Si deseas lanzar el launcher directamente para depurar o probar cambios:
+#### 3. Ejecutar en modo desarrollo
 ```powershell
 dotnet run
 ```
-
-### 4. Compilar en modo Release (Carpeta)
-Para compilar la aplicación optimizada pero con los archivos DLL sueltos:
+#### 4. Compilar en modo Release (Carpeta)
 ```powershell
 dotnet build -c Release
 ```
-
----
-
-## 📦 Publicación del Ejecutable Único (`.exe` Portátil)
-
-Uno de los mayores atractivos de este proyecto es que puedes empaquetarlo todo en **un solo archivo ejecutable independiente** que los jugadores pueden abrir directamente sin instalar nada más en su computadora.
-
-Para generarlo, abre PowerShell en la raíz del proyecto y ejecuta:
+#### 5. Publicación del Ejecutable Único (`.exe` Portátil)
 ```powershell
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFileBundle=true
 ```
 
-### Explicación de los parámetros:
-*   `-c Release`: Genera la versión final optimizada.
-*   `-r win-x64`: Empaqueta específicamente para sistemas Windows de 64 bits.
-*   `--self-contained true`: Incluye el entorno de ejecución de .NET 10 dentro del ejecutable, por lo que el jugador **no necesita tener instalado .NET**.
-*   `-p:PublishSingleFile=true`: Agrupa todos los archivos DLL y recursos (incluido el logo del Koala) en un único `.exe`.
-*   `-p:PublishReadyToRun=true`: Precompila el código para acelerar el tiempo de inicio de la aplicación en el ordenador del usuario.
-*   `-p:EnableCompressionInSingleFileBundle=true`: Comprime el binario final para reducir significativamente el peso de distribución.
+---
 
-Una vez que termine la compilación, encontrarás tu archivo ejecutable listo para distribuir en la ruta:
-📁 `bin\Release\net10.0-windows\win-x64\publish\klauncher.exe`
+<a name="en"></a>
+## 🇬🇧 English
+
+An open-source Windows Launcher developed in C# and WPF under **.NET 10**. It enables users to download, verify, and automatically extract GTA V (VMP Edition) split into 29 parts, as well as install game prerequisites.
+
+### 🎨 Key Features
+*   **Premium & Modern Design:** Borderless window interface with glassmorphism, purple and neon pink gradients, custom title bar for dragging, a custom **Koala Gamer** logo with dynamic drop shadow, and neon LED animated download indicators.
+*   **Download Manager with Pause, Resume & Auto-Resume:** Sequential download of 29 parts of 2.4 GB (~70 GB total). If the connection drops or the user pauses, it resumes from the exact byte. On application startup, it automatically detects incomplete downloads and resumes immediately.
+*   **High-Performance I/O Optimizations:** Disk space pre-allocation (`SetLength`) during download and extraction to prevent fragmentation on HDDs and maximize write speeds.
+*   **Automatic Extraction & Cleanup:** Automatically extracts the RAR sequence using `SharpCompress` with optimized 256 KB buffers. **All `.rar` files are automatically deleted** after extraction to free up ~70 GB of disk space.
+*   **Discord Rich Presence:** Real-time Discord status updates: main menu, downloading (with current part, speed, and ETA), extracting, playing, or completed.
+*   **Prerequisites Installer:** Automates silent download and installation of DirectX 11 Runtime and Visual C++ Redistributable 2015-2022.
+
+### 🛠️ Development Requirements
+*   **Windows OS** (10 or 11 recommended).
+*   **.NET 10 SDK** or higher installed.
+*   Visual Studio 2022 or VS Code with C# Dev Kit.
+
+### 🚀 Build and Run Instructions
+
+#### 1. Clone the repository
+```powershell
+git clone https://github.com/userbabn/klauncher.git
+```
+#### 2. Restore NuGet dependencies
+```powershell
+dotnet restore
+```
+#### 3. Run in development mode
+```powershell
+dotnet run
+```
+#### 4. Build in Release mode (Folder)
+```powershell
+dotnet build -c Release
+```
+#### 5. Publish Single Portable Executable (`.exe`)
+```powershell
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFileBundle=true
+```
 
 ---
 
-## 🤝 Contribuciones y Licencia
-Este proyecto es de código abierto (Open Source). Cualquier contribución es bienvenida mediante Pull Requests. Siéntete libre de clonarlo, bifurcarlo (fork) y adaptarlo para las necesidades de tu propia comunidad de juego.
+<a name="fa"></a>
+## 🇮🇷 فارسی (Persian)
+
+لانچر متن‌باز ویندوز برای بازی GTA V نسخه VMP Edition توسعه یافته با زبان سی‌شارپ (#C) و WPF تحت فریم‌ورک **NET 10.**. این برنامه به کاربران اجازه می‌دهد بازی تقسیم شده به ۲۹ پارت (حدود ۷۰ گیگابایت) را به‌صورت کاملاً خودکار دانلود، تأیید و استخراج کرده و پیش‌نیازهای بازی را نصب کنند.
+
+### 🎨 ویژگی‌های اصلی
+*   **طراحی نئون و پرمیوم:** رابط کاربری بدون حاشیه (Borderless) با افکت‌های شیشه‌ای، طیف‌های رنگی بنفش و صورتی نئون، لوگوی اختصاصی کوالا گیمر به همراه سایه داینامیک و چراغ‌های وضعیت ال‌ای‌دی متحرک.
+*   **مدیریت دانلود با قابلیت مکث، ادامه و شروع خودکار:** دانلود متوالی ۲۹ پارت ۲.۴ گیگابایتی. در صورت قطع اتصال یا کلیک بر روی دکمه مکث، دانلود از بایت دقیق متوقف شده ادامه می‌یابد. همچنین با باز کردن مجدد لانچر، فرآیند دانلود به‌طور خودکار از سر گرفته می‌شود.
+*   **بهینه‌سازی نوشتن روی دیسک (I/O Optimizations):** تخصیص پیشاپیش فضای دیسک (`SetLength`) هنگام دانلود و استخراج فایل‌ها برای جلوگیری از تکه‌تکه شدن هارد دیسک (HDD) و افزایش سرعت ذخیره‌سازی.
+*   **استخراج و پاکسازی خودکار فایل‌ها:** استخراج خودکار پارت‌های RAR با استفاده از کتابخانه `SharpCompress` با بافر بهینه‌سازی شده ۲۵۶ کیلوبایتی. پس از اتمام استخراج، **فایل‌های فشرده RAR به طور خودکار حذف می‌شوند** تا ۷۰ گیگابایت فضای خالی دیسک آزاد شود.
+*   **ارتباط با دیسکورد (Discord Rich Presence):** نمایش وضعیت در دیسکورد به همراه مشخصات پارت در حال دانلود، سرعت دانلود، زمان باقی‌مانده و دکمه ورود به دیسکورد سرور.
+*   **نصب خودکار پیش‌نیازها:** دانلود و نصب کاملاً بی‌صدا و پس‌زمینه DirectX 11 و Visual C++ Redistributable 2015-2022.
+
+### 🛠️ نیازمندی‌های توسعه
+*   **ویندوز** (نسخه ۱۰ یا ۱۱ پیشنهاد می‌شود).
+*   **اس‌دی‌کی دات‌نت ۱۰** (.NET 10 SDK) یا بالاتر.
+*   ویژوال استودیو ۲۰۲۲ یا VS Code به همراه C# Dev Kit.
+
+### 🚀 راهنمای کامپایل و اجرا
+
+#### ۱. کلون کردن مخزن
+```powershell
+git clone https://github.com/userbabn/klauncher.git
+```
+#### ۲. بازیابی پکیج‌های NuGet
+```powershell
+dotnet restore
+```
+#### ۳. اجرا در حالت توسعه
+```powershell
+dotnet run
+```
+#### ۴. کامپایل در حالت Release (پوشه)
+```powershell
+dotnet build -c Release
+```
+#### ۵. خروجی گرفتن به‌صورت تک فایل پرتابل (`.exe`)
+```powershell
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFileBundle=true
+```
+
+---
+
+## 🤝 Contribuciones y Licencia / License & Contributions / مشارکت و لایسنس
+This project is open-source under the **MIT License**. Feel free to fork and modify it.  
+Este proyecto es de código abierto bajo la licencia **MIT**.  
+این پروژه متن‌باز تحت لایسنس **MIT** منتشر شده است.
