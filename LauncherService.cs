@@ -25,7 +25,7 @@ namespace klauncher
     /// <summary>
     /// Persisted state written to disk so a crash/accidental close can be resumed.
     /// </summary>
-    internal class DownloadState
+    public class DownloadState
     {
         public int CompletedParts { get; set; } = 0;
         public long TotalBytesDownloaded { get; set; } = 0;
