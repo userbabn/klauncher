@@ -197,7 +197,7 @@ namespace klauncher
                     },
                     Buttons = new Button[]
                     {
-                        new Button { Label = "Discord VMP", Url = "https://discord.gg/RRAE3uYNC" }
+                        new Button { Label = "Discord VMP", Url = "https://discord.gg/ekhkHWQbr2" }
                     }
                 };
 

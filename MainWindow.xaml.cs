@@ -170,7 +170,7 @@ namespace klauncher
             {
                 Process.Start(new ProcessStartInfo
                 {
-                    FileName        = "https://discord.gg/RRAE3uYNC",
+                    FileName        = "https://discord.gg/ekhkHWQbr2",
                     UseShellExecute = true
                 });
             }
