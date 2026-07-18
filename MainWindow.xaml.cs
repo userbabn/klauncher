@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Input;
 
@@ -41,12 +42,18 @@ namespace klauncher
 
         // ── Close Handling ────────────────────────────────────────────────────────
 
-        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
+            // Retry Discord connection after 2 seconds if it didn't connect initially
+            await Task.Delay(2000);
+            if (!_discordService.IsConnected)
+            {
+                _discordService.RetryConnect();
+            }
+
             var saved = _launcherService.GetSavedState();
             if (saved != null && !string.IsNullOrEmpty(saved.TargetFolder) && saved.CompletedParts < 29)
             {
-                // Auto-resume: show status indicator
                 DownloadStatusBar.Visibility = Visibility.Visible;
                 StatusText.Text = $"Resuming download (part {saved.CompletedParts + 1}/29)...";
                 StatusDot.Fill = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString("#00bcd4");

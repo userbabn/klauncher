@@ -1,30 +1,22 @@
 using System;
+using System.Threading;
 using DiscordRPC;
 using DiscordRPC.Logging;
 
 namespace klauncher
 {
     /// <summary>
-    /// Servicio de Discord Rich Presence para KLAUNCHER.
-    /// Muestra en Discord el estado actual del launcher en tiempo real.
-    /// 
-    /// CONFIGURACIÓN:
-    /// Para usar tu propio Application ID:
-    ///   1. Ve a https://discord.com/developers/applications
-    ///   2. Crea una nueva aplicación
-    ///   3. Copia el "Application ID" y reemplaza el valor de CLIENT_ID
-    ///   4. En la sección "Rich Presence > Art Assets", sube imágenes con los keys:
-    ///      - "klauncher_logo" → logo del launcher (koala)
-    ///      - "gta_logo"       → logo de GTA V
+    /// Discord Rich Presence service for KLAUNCHER.
+    /// Shows real-time launcher status in Discord.
     /// </summary>
     public class DiscordService : IDisposable
     {
-        // ⚠️ Reemplaza este ID con el de tu propia aplicación en Discord Developer Portal
         private const string CLIENT_ID = "1528029499491356715";
 
         private DiscordRpcClient? _client;
         private bool _disposed = false;
         private DateTime _startTime;
+        private bool _initialized = false;
 
         public bool IsConnected => _client?.IsInitialized ?? false;
 
@@ -34,33 +26,55 @@ namespace klauncher
             {
                 _startTime = DateTime.UtcNow;
 
-                _client = new DiscordRpcClient(CLIENT_ID)
+                _client = new DiscordRpcClient(CLIENT_ID, pipe: -1)
                 {
-                    Logger = new NullLogger()
+                    Logger = new ConsoleLogger() { Level = LogLevel.Warning }
                 };
 
                 _client.OnReady += (sender, e) =>
                 {
-                    // Rich Presence conectado
+                    _initialized = true;
                 };
 
                 _client.OnError += (sender, e) =>
                 {
-                    // Silenciar errores de conexión (Discord puede no estar abierto)
+                    // Log but don't crash
+                    System.Diagnostics.Debug.WriteLine($"[Discord] Error: {e.Type} - {e.Message}");
+                };
+
+                _client.OnConnectionFailed += (sender, e) =>
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Discord] Connection failed: {e.FailedPipe}");
                 };
 
                 _client.Initialize();
 
-                // Estado inicial: en el menú principal
+                // Give Discord a moment to connect, then set initial state
+                Thread.Sleep(200);
                 SetMenuState();
             }
-            catch
+            catch (Exception ex)
             {
-                // Si Discord no está instalado o hay error, ignorar silenciosamente
+                System.Diagnostics.Debug.WriteLine($"[Discord] Init failed: {ex.Message}");
+                // Don't crash - Discord is optional
             }
         }
 
-        /// <summary>Estado: En el menú principal del launcher</summary>
+        /// <summary>Retry connection if it failed (call after a delay)</summary>
+        public void RetryConnect()
+        {
+            if (_initialized || _client?.IsInitialized == true) return;
+
+            try
+            {
+                _client?.Dispose();
+                _client = null;
+                Initialize();
+            }
+            catch { }
+        }
+
+        /// <summary>Main menu state</summary>
         public void SetMenuState()
         {
             SetPresence(
@@ -73,12 +87,12 @@ namespace klauncher
             );
         }
 
-        /// <summary>State: Downloading files</summary>
+        /// <summary>Downloading state</summary>
         public void SetDownloadingState(int currentPart, int totalParts, string speed)
         {
             SetPresence(
                 details: "Downloading GTA V VMP Edition",
-                state: $"Part {currentPart}/{totalParts} • {speed}",
+                state: $"Part {currentPart}/{totalParts} \u2022 {speed}",
                 largeImageKey: "klauncher_logo",
                 largeImageText: "KLAUNCHER by Koala Gamer",
                 smallImageKey: "gta_logo",
@@ -86,18 +100,18 @@ namespace klauncher
             );
         }
 
-        /// <summary>State: Downloading with ETA</summary>
+        /// <summary>Downloading state with ETA</summary>
         public void SetDownloadingState(int currentPart, int totalParts, string speed, TimeSpan eta)
         {
             string etaStr = (eta == TimeSpan.MaxValue || eta.TotalSeconds <= 0)
                 ? ""
                 : (eta.TotalHours >= 1
-                    ? $" • ~{(int)eta.TotalHours}h {eta.Minutes:D2}m"
-                    : $" • ~{(int)eta.TotalMinutes}m {eta.Seconds:D2}s");
+                    ? $" \u2022 ~{(int)eta.TotalHours}h {eta.Minutes:D2}m"
+                    : $" \u2022 ~{(int)eta.TotalMinutes}m {eta.Seconds:D2}s");
 
             SetPresence(
                 details: "Downloading GTA V VMP Edition",
-                state: $"Part {currentPart}/{totalParts} • {speed}{etaStr}",
+                state: $"Part {currentPart}/{totalParts} \u2022 {speed}{etaStr}",
                 largeImageKey: "klauncher_logo",
                 largeImageText: "KLAUNCHER by Koala Gamer",
                 smallImageKey: "gta_logo",
@@ -105,7 +119,7 @@ namespace klauncher
             );
         }
 
-        /// <summary>State: Download paused</summary>
+        /// <summary>Download paused</summary>
         public void SetPausedState()
         {
             SetPresence(
@@ -118,7 +132,7 @@ namespace klauncher
             );
         }
 
-        /// <summary>State: Extracting files</summary>
+        /// <summary>Extracting files</summary>
         public void SetExtractingState(double percentage)
         {
             SetPresence(
@@ -131,7 +145,7 @@ namespace klauncher
             );
         }
 
-        /// <summary>State: Playing GTA V</summary>
+        /// <summary>Playing GTA V</summary>
         public void SetPlayingState()
         {
             SetPresence(
@@ -144,7 +158,7 @@ namespace klauncher
             );
         }
 
-        /// <summary>State: Installation completed</summary>
+        /// <summary>Installation completed</summary>
         public void SetCompletedState()
         {
             SetPresence(
@@ -183,15 +197,15 @@ namespace klauncher
                     },
                     Buttons = new Button[]
                     {
-                        new Button { Label = "🎮 Discord VMP", Url = "https://discord.gg/RRAE3uYNC" }
+                        new Button { Label = "Discord VMP", Url = "https://discord.gg/RRAE3uYNC" }
                     }
                 };
 
                 _client.SetPresence(presence);
             }
-            catch
+            catch (Exception ex)
             {
-                // Ignorar errores silenciosamente
+                System.Diagnostics.Debug.WriteLine($"[Discord] SetPresence failed: {ex.Message}");
             }
         }
 

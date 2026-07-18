@@ -9,6 +9,7 @@ using SharpCompress.Archives.Rar;
 using SharpCompress.Common;
 using System.Collections.Generic;
 using System.Text.Json;
+using System.Linq;
 
 namespace klauncher
 {
@@ -39,28 +40,29 @@ namespace klauncher
         private static readonly HttpClient _httpClient = new HttpClient(new HttpClientHandler
         {
             AutomaticDecompression = System.Net.DecompressionMethods.All,
-            MaxConnectionsPerServer = 4,   // allow parallel streams per host
+            MaxConnectionsPerServer = 8,
             MaxAutomaticRedirections = 5
         })
         {
-            Timeout = TimeSpan.FromHours(2),
-            DefaultRequestVersion = new Version(2, 0),                 // prefer HTTP/2
+            Timeout = TimeSpan.FromHours(4),
+            DefaultRequestVersion = new Version(2, 0),
             DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower
         };
 
         static LauncherService()
         {
-            _httpClient.DefaultRequestHeaders.ConnectionClose = false;  // Keep-Alive
+            _httpClient.DefaultRequestHeaders.ConnectionClose = false;
             _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "KLauncher/2.0");
         }
 
         // ── Constants ────────────────────────────────────────────────────────────
-        private const int    TotalParts      = 29;
-        private const string UrlTemplate     = "https://cdn.vmp.ir/game/1/Grand.Theft.Auto.V.VMP.Edition.part{0:D2}.rar";
-        private const int    BufferSize      = 262144;  // 256 KB – optimal for large file I/O
-        private const int    MaxRetries      = 5;       // retry failed downloads up to 5 times
-        private const int    RetryDelayMs    = 2000;    // 2 seconds between retries
-        private const string StateFileName   = "download_state.json";
+        private const int    TotalParts       = 29;
+        private const string UrlTemplate      = "https://cdn.vmp.ir/game/1/Grand.Theft.Auto.V.VMP.Edition.part{0:D2}.rar";
+        private const int    BufferSize       = 262144;  // 256 KB
+        private const int    MaxRetries       = 5;
+        private const int    RetryDelayMs     = 2000;
+        private const int    ParallelDownloads = 4;       // download 4 parts simultaneously
+        private const string StateFileName    = "download_state.json";
 
         // ── State ────────────────────────────────────────────────────────────────
         private LauncherState _state    = LauncherState.Idle;
@@ -70,23 +72,28 @@ namespace klauncher
 
         // Progress tracking
         private long   _totalBytesDownloaded = 0;
-        private double _downloadSpeed        = 0;  // bytes/s (exponentially smoothed)
+        private double _downloadSpeed        = 0;
         private int    _completedParts       = 0;
+        private readonly object _lock = new object();
 
-        // ETA tracking across parts (session-wide moving average of speed)
+        // ETA tracking
         private double _sessionSpeedEMA = 0;
-        private const double SpeedAlpha = 0.08;  // smoothing factor (lower = smoother)
+        private const double SpeedAlpha = 0.08;
         private const long   EstimatedTotalBytes = 70L * 1024 * 1024 * 1024; // ~70 GB
+
+        // Per-part progress for parallel downloads
+        private long[] _partBytesDownloaded = new long[TotalParts + 1];
+        private Stopwatch[] _partStopwatches = new Stopwatch[TotalParts + 1];
 
         // ── Events ───────────────────────────────────────────────────────────────
         public event Action<LauncherState>?        StateChanged;
-        public event Action<double, string>?       DownloadProgressChanged;    // (%, speed)
+        public event Action<double, string>?       DownloadProgressChanged;
         public event Action<double>?               TotalDownloadProgressChanged;
         public event Action<int, int>?             PartDownloadStarted;
         public event Action<string, double>?       ExtractionProgressChanged;
         public event Action<string>?               StatusMessageChanged;
         public event Action<string>?               ErrorOccurred;
-        public event Action<TimeSpan>?             EstimatedTimeRemainingChanged; // NEW
+        public event Action<TimeSpan>?             EstimatedTimeRemainingChanged;
 
         // ── Public Properties ────────────────────────────────────────────────────
         public LauncherState State
@@ -106,10 +113,7 @@ namespace klauncher
         private static string GetStateFilePath() =>
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, StateFileName);
 
-        public DownloadState? GetSavedState()
-        {
-            return LoadState();
-        }
+        public DownloadState? GetSavedState() => LoadState();
 
         private void SaveState(string targetFolder)
         {
@@ -124,7 +128,7 @@ namespace klauncher
                 };
                 File.WriteAllText(GetStateFilePath(), JsonSerializer.Serialize(st));
             }
-            catch { /* ignore write errors */ }
+            catch { }
         }
 
         private DownloadState? LoadState()
@@ -180,9 +184,6 @@ namespace klauncher
             StatusMessageChanged?.Invoke("Operation cancelled.");
         }
 
-        /// <summary>
-        /// Starts a new download or resumes from a persisted state if one exists.
-        /// </summary>
         public async Task StartDownloadAndInstallAsync(string targetFolder)
         {
             if (State == LauncherState.Downloading || State == LauncherState.Extracting)
@@ -191,7 +192,6 @@ namespace klauncher
             _isPaused        = false;
             _cancelRequested = false;
 
-            // Try to resume from persisted state
             var saved = LoadState();
             if (saved != null && saved.CompletedParts > 0)
             {
@@ -235,7 +235,7 @@ namespace klauncher
                 bool extractSuccess = await ExtractAllPartsAsync(targetFolder);
                 if (extractSuccess)
                 {
-                    DeleteState();  // clean up persisted state
+                    DeleteState();
                     State = LauncherState.Completed;
                     StatusMessageChanged?.Invoke("Installation completed successfully!");
                 }
@@ -252,20 +252,61 @@ namespace klauncher
             }
         }
 
+        // ── Parallel Download All Parts ──────────────────────────────────────────
         private async Task<bool> DownloadAllPartsAsync(string targetFolder)
         {
+            // Collect parts that need downloading
+            var partsToDownload = new List<int>();
             for (int partNum = 1; partNum <= TotalParts; partNum++)
             {
                 if (_isPaused || _cancelRequested) return false;
 
-                // Skip already-completed parts (from state or this session)
-                if (partNum <= _completedParts)
+                string fileName  = string.Format("Grand.Theft.Auto.V.VMP.Edition.part{0:D2}.rar", partNum);
+                string finalPath = Path.Combine(targetFolder, fileName);
+
+                // Skip completed parts
+                if (partNum <= _completedParts || File.Exists(finalPath))
                 {
-                    // Already counted in restored state, just fire progress
-                    double skipProg = ((double)_completedParts / TotalParts) * 100;
+                    if (File.Exists(finalPath) && partNum > _completedParts)
+                    {
+                        lock (_lock)
+                        {
+                            _totalBytesDownloaded += new FileInfo(finalPath).Length;
+                            _completedParts++;
+                        }
+                    }
+                    double skipProg = ((double)Math.Max(partNum, _completedParts) / TotalParts) * 100;
                     TotalDownloadProgressChanged?.Invoke(skipProg);
                     continue;
                 }
+
+                partsToDownload.Add(partNum);
+            }
+
+            if (partsToDownload.Count == 0) return true;
+
+            StatusMessageChanged?.Invoke($"Downloading {partsToDownload.Count} parts ({ParallelDownloads} at a time)...");
+
+            // Download in parallel batches
+            int nextPartIndex = 0;
+            int activeDownloads = 0;
+            bool anyFailed = false;
+            var semaphore = new SemaphoreSlim(ParallelDownloads);
+            var allTasks = new List<Task>();
+
+            while (nextPartIndex < partsToDownload.Count && !_isPaused && !_cancelRequested)
+            {
+                await semaphore.WaitAsync();
+
+                if (_isPaused || _cancelRequested || anyFailed)
+                {
+                    semaphore.Release();
+                    break;
+                }
+
+                int partNum = partsToDownload[nextPartIndex];
+                nextPartIndex++;
+                activeDownloads++;
 
                 string fileName  = string.Format("Grand.Theft.Auto.V.VMP.Edition.part{0:D2}.rar", partNum);
                 string url       = string.Format(UrlTemplate, partNum);
@@ -275,41 +316,66 @@ namespace klauncher
                 StatusMessageChanged?.Invoke($"Downloading part {partNum}/{TotalParts}...");
                 PartDownloadStarted?.Invoke(partNum, TotalParts);
 
-                // If final RAR already exists skip it
-                if (File.Exists(finalPath))
+                int capturedPart = partNum;
+                var task = Task.Run(async () =>
                 {
-                    _totalBytesDownloaded += new FileInfo(finalPath).Length;
-                    _completedParts++;
-                    double skipProg = ((double)_completedParts / TotalParts) * 100;
-                    TotalDownloadProgressChanged?.Invoke(skipProg);
-                    SaveState(targetFolder);
-                    continue;
-                }
+                    try
+                    {
+                        bool success = await DownloadFileWithResumeAsync(url, tempPath, _downloadCts?.Token ?? CancellationToken.None, capturedPart);
 
-                _downloadCts = new CancellationTokenSource();
-                bool partSuccess = await DownloadFileWithResumeAsync(url, tempPath, _downloadCts.Token, partNum);
+                        if (success && File.Exists(tempPath))
+                        {
+                            File.Move(tempPath, finalPath, overwrite: true);
+                            long fileSize = new FileInfo(finalPath).Length;
 
-                if (!partSuccess) return false;
+                            lock (_lock)
+                            {
+                                _completedParts++;
+                                _totalBytesDownloaded += fileSize;
+                            }
 
-                // Rename .tmp → final
-                if (File.Exists(tempPath))
-                {
-                    File.Move(tempPath, finalPath, overwrite: true);
-                    _completedParts++;
-                    _totalBytesDownloaded += new FileInfo(finalPath).Length;
-                    double totalProgress = ((double)_completedParts / TotalParts) * 100;
-                    TotalDownloadProgressChanged?.Invoke(totalProgress);
-                    SaveState(targetFolder);  // persist after every finished part
-                }
+                            double totalProgress = ((double)_completedParts / TotalParts) * 100;
+                            TotalDownloadProgressChanged?.Invoke(totalProgress);
+                            SaveState(targetFolder);
+
+                            StatusMessageChanged?.Invoke($"Part {capturedPart}/{TotalParts} completed. ({_completedParts}/{TotalParts} total)");
+                        }
+                        else if (!success)
+                        {
+                            anyFailed = true;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        ErrorOccurred?.Invoke($"Error on part {capturedPart}: {ex.Message}");
+                        anyFailed = true;
+                    }
+                    finally
+                    {
+                        semaphore.Release();
+                        Interlocked.Decrement(ref activeDownloads);
+                    }
+                });
+
+                allTasks.Add(task);
+
+                // Small delay between dispatching to avoid hammering the server
+                await Task.Delay(100);
             }
 
-            return true;
+            // Wait for all active downloads to complete
+            await Task.WhenAll(allTasks);
+
+            return !anyFailed && !_isPaused && !_cancelRequested;
         }
 
+        // ── Single File Download with Resume & Retry ─────────────────────────────
         private async Task<bool> DownloadFileWithResumeAsync(string url, string tempPath, CancellationToken token, int partNum = 0)
         {
             for (int attempt = 1; attempt <= MaxRetries; attempt++)
             {
+                if (_isPaused || _cancelRequested) return false;
+
                 long existingLength = 0;
                 if (File.Exists(tempPath))
                     existingLength = new FileInfo(tempPath).Length;
@@ -341,7 +407,7 @@ namespace klauncher
 
                     if (!appendMode && contentLength.HasValue)
                     {
-                        fileStream.SetLength(contentLength.Value); // Pre-allocate to reduce fragmentation
+                        fileStream.SetLength(contentLength.Value);
                     }
 
                     byte[] buffer             = new byte[BufferSize];
@@ -359,24 +425,30 @@ namespace klauncher
                         await fileStream.WriteAsync(buffer, 0, bytesRead, token);
                         currentBytesDownloaded += bytesRead;
 
+                        // Track per-part bytes for combined speed
+                        _partBytesDownloaded[partNum] = currentBytesDownloaded;
+
                         // Update speed & ETA every ~500 ms
                         if (stopwatch.ElapsedMilliseconds >= 500)
                         {
-                            double seconds          = stopwatch.Elapsed.TotalSeconds;
-                            long   bytesDelta       = (currentBytesDownloaded - existingLength) - lastBytesRead;
-                            double instantSpeed     = bytesDelta / seconds;
+                            // Calculate combined speed across all active parallel downloads
+                            long totalBytesThisTick = 0;
+                            for (int i = 1; i <= TotalParts; i++)
+                                totalBytesThisTick += _partBytesDownloaded[i];
 
-                            // Exponential moving average
+                            double seconds      = stopwatch.Elapsed.TotalSeconds;
+                            long   bytesDelta   = totalBytesThisTick - lastBytesRead;
+                            double instantSpeed = bytesDelta / seconds;
+
                             _sessionSpeedEMA = (_sessionSpeedEMA == 0)
                                 ? instantSpeed
                                 : _sessionSpeedEMA * (1 - SpeedAlpha) + instantSpeed * SpeedAlpha;
 
                             _downloadSpeed = _sessionSpeedEMA;
-
-                            lastBytesRead = currentBytesDownloaded - existingLength;
+                            lastBytesRead = totalBytesThisTick;
                             stopwatch.Restart();
 
-                            // --- ETA ---
+                            // ETA
                             long remainingBytes = EstimatedTotalBytes - _totalBytesDownloaded - (currentBytesDownloaded - existingLength);
                             if (remainingBytes < 0) remainingBytes = 0;
                             TimeSpan eta = (_downloadSpeed > 0)
@@ -384,16 +456,15 @@ namespace klauncher
                                 : TimeSpan.MaxValue;
                             EstimatedTimeRemainingChanged?.Invoke(eta);
 
-                            // Progress for this file
+                            // Per-file progress
                             double percentage  = (totalBytes > 0) ? ((double)currentBytesDownloaded / totalBytes) * 100.0 : 0;
                             string speedString = FormatSpeed(_downloadSpeed);
                             DownloadProgressChanged?.Invoke(percentage, speedString);
                         }
                     }
 
-                    // 100% for this part
                     DownloadProgressChanged?.Invoke(100.0, "0.0 KB/s");
-                    return true; // success
+                    return true;
                 }
                 catch (OperationCanceledException)
                 {
@@ -405,9 +476,9 @@ namespace klauncher
                     {
                         StatusMessageChanged?.Invoke($"Retry {attempt}/{MaxRetries} for part {partNum}...");
                         await Task.Delay(RetryDelayMs, token);
-                        continue; // retry
+                        continue;
                     }
-                    ErrorOccurred?.Invoke($"Network error after {MaxRetries} retries: {ex.Message}");
+                    ErrorOccurred?.Invoke($"Network error after {MaxRetries} retries on part {partNum}: {ex.Message}");
                     return false;
                 }
             }
@@ -443,7 +514,7 @@ namespace klauncher
                             if (_cancelRequested) return false;
                             if (entry.IsDirectory) continue;
 
-                            string entryKey = entry.Key ?? "archivo";
+                            string entryKey = entry.Key ?? "file";
                             ExtractionProgressChanged?.Invoke(entryKey, ((double)totalBytesExtracted / totalSizeToExtract) * 100);
 
                             string  destPath  = Path.Combine(targetFolder, entryKey);
@@ -455,14 +526,12 @@ namespace klauncher
                             using var fileStream  = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, 262144, true);
 
                             if (entry.Size > 0)
-                            {
-                                fileStream.SetLength(entry.Size); // Pre-allocate to reduce fragmentation
-                            }
+                                fileStream.SetLength(entry.Size);
 
-                            byte[]    buffer              = new byte[262144]; // Increased to 256KB for faster copy
-                            int       read;
-                            long      entryBytesWritten   = 0;
-                            var       progressStopwatch   = Stopwatch.StartNew();
+                            byte[] buffer = new byte[262144];
+                            int read;
+                            long entryBytesWritten = 0;
+                            var progressStopwatch  = Stopwatch.StartNew();
 
                             while ((read = entryStream.Read(buffer, 0, buffer.Length)) > 0)
                             {
