@@ -235,6 +235,9 @@ namespace klauncher
                 bool extractSuccess = await ExtractAllPartsAsync(targetFolder);
                 if (extractSuccess)
                 {
+                    // Download VMP.exe if not present
+                    await DownloadVmpAsync(targetFolder);
+
                     DeleteState();
                     State = LauncherState.Completed;
                     StatusMessageChanged?.Invoke("Installation completed successfully!");
@@ -570,6 +573,49 @@ namespace klauncher
             {
                 ErrorOccurred?.Invoke($"Extraction error: {ex.Message}");
                 return false;
+            }
+        }
+
+        // ── VMP Installer ────────────────────────────────────────────────────────
+        private async Task DownloadVmpAsync(string targetFolder)
+        {
+            string vmpPath = Path.Combine(targetFolder, "VMP.exe");
+            if (File.Exists(vmpPath))
+            {
+                StatusMessageChanged?.Invoke("VMP.exe already installed.");
+                return;
+            }
+
+            string vmpUrl = "https://cdn.vmp.ir/VMP.exe?v=1";
+            StatusMessageChanged?.Invoke("Downloading VMP.exe...");
+
+            for (int attempt = 1; attempt <= MaxRetries; attempt++)
+            {
+                if (_cancelRequested) return;
+                string tempPath = vmpPath + ".tmp";
+                try
+                {
+                    using var response = await _httpClient.GetAsync(vmpUrl, HttpCompletionOption.ResponseHeadersRead);
+                    response.EnsureSuccessStatusCode();
+                    using var stream = await response.Content.ReadAsStreamAsync();
+                    using var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, BufferSize);
+                    await stream.CopyToAsync(fs);
+                    File.Move(tempPath, vmpPath, overwrite: true);
+                    StatusMessageChanged?.Invoke("VMP.exe installed successfully.");
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    if (attempt < MaxRetries)
+                    {
+                        StatusMessageChanged?.Invoke($"VMP download retry {attempt}/{MaxRetries}...");
+                        await Task.Delay(RetryDelayMs);
+                    }
+                    else
+                    {
+                        ErrorOccurred?.Invoke($"Failed to download VMP.exe after {MaxRetries} retries: {ex.Message}");
+                    }
+                }
             }
         }
 
