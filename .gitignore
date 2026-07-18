@@ -1,0 +1,25 @@
+# Build output
+bin/
+obj/
+
+# User secrets / local config
+*.user
+*.suo
+
+# VS Code / Rider
+.vscode/
+.idea/
+
+# NuGet packages (restored automatically)
+*.nupkg
+packages/
+
+# Publish artifacts (don't track compiled binaries in source)
+bin/Release/net10.0-windows/win-x64/publish/
+
+# Temporary download state file (generated at runtime)
+download_state.json
+
+# OS artifacts
+Thumbs.db
+.DS_Store
