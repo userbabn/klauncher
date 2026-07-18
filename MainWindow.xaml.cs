@@ -46,8 +46,12 @@ namespace klauncher
             var saved = _launcherService.GetSavedState();
             if (saved != null && !string.IsNullOrEmpty(saved.TargetFolder) && saved.CompletedParts < 29)
             {
-                // Auto-resume download
-                ShowInstallScreen(); // This sets panel visibilities
+                // Auto-resume: show status indicator
+                DownloadStatusBar.Visibility = Visibility.Visible;
+                StatusText.Text = $"Resuming download (part {saved.CompletedParts + 1}/29)...";
+                StatusDot.Fill = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString("#00bcd4");
+
+                ShowInstallScreen();
                 InstallCtrl_StartInstallation(saved.TargetFolder);
             }
         }
@@ -59,8 +63,8 @@ namespace klauncher
                 _launcherService.State == LauncherState.Extracting)
             {
                 var result = MessageBox.Show(
-                    "Hay una descarga en curso.\n\nEl progreso se guardará y podrás reanudar más tarde.\n¿Deseas salir?",
-                    "Cerrar KLAUNCHER",
+                    "A download is in progress.\n\nProgress will be saved and you can resume later.\nDo you want to exit?\n\n---\n\nیک دانلود در حال انجام است.\nپیشرفت ذخیره خواهد شد و می‌توانید بعداً ادامه دهید.\nآیا می‌خواهید خارج شوید؟",
+                    "Close KLAUNCHER / بستن KLAUNCHER",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Warning);
 
@@ -165,7 +169,7 @@ namespace klauncher
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"No se pudo abrir el enlace: {ex.Message}", "Error",
+                MessageBox.Show($"Could not open link: {ex.Message}\n\nلینک باز نشد: {ex.Message}", "Error",
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
@@ -189,15 +193,15 @@ namespace klauncher
                 catch (Exception ex)
                 {
                     _discordService.SetMenuState();
-                    MessageBox.Show($"Error al iniciar el juego: {ex.Message}",
-                        "Error de ejecución", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show($"Error launching game: {ex.Message}\n\nخطا در اجرای بازی: {ex.Message}",
+                        "Execution Error / خطای اجرا", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
             }
             else
             {
                 MessageBox.Show(
-                    "El juego no está instalado o no se encuentra el archivo 'VMP.exe'.\n\nSerás redirigido a la pantalla de instalación.",
-                    "Juego no encontrado", MessageBoxButton.OK, MessageBoxImage.Information);
+                    "Game is not installed or 'VMP.exe' was not found.\nYou will be redirected to the installation screen.\n\n---\n\nبازی نصب نیست یا فایل 'VMP.exe' یافت نشد.\nبه صفحه نصب هدایت خواهید شد.",
+                    "Game not found / بازی یافت نشد", MessageBoxButton.OK, MessageBoxImage.Information);
                 ShowInstallScreen();
             }
         }
@@ -228,9 +232,12 @@ namespace klauncher
         {
             Dispatcher.Invoke(() =>
             {
+                // Hide download status indicator
+                DownloadStatusBar.Visibility = Visibility.Collapsed;
+
                 MessageBox.Show(
-                    "¡GTA V VMP Edition se ha descargado y extraído correctamente!\n\nYa puedes hacer clic en JUGAR.",
-                    "Instalación Finalizada", MessageBoxButton.OK, MessageBoxImage.Information);
+                    "GTA V VMP Edition has been downloaded and extracted successfully!\n\nYou can now click PLAY.\n\n---\n\nبازی GTA V VMP Edition با موفقیت دانلود و استخراج شد!\nاکنون می‌توانید روی PLAY کلیک کنید.",
+                    "Installation Complete / نصب کامل شد", MessageBoxButton.OK, MessageBoxImage.Information);
 
                 ContentArea.Content    = null;
                 ContentArea.Visibility = Visibility.Collapsed;

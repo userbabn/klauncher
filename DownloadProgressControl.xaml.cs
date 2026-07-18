@@ -59,8 +59,8 @@ namespace klauncher
                 switch (state)
                 {
                     case LauncherState.Downloading:
-                        TxtTitle.Text              = "DESCARGANDO GTA V - VMP Edition";
-                        TxtPauseButton.Text        = "Pausar";
+                        TxtTitle.Text              = "DOWNLOADING GTA V - VMP Edition";
+                        TxtPauseButton.Text        = "Pause";
                         IconPause.Visibility       = Visibility.Visible;
                         IconPlay.Visibility        = Visibility.Collapsed;
                         BtnPause.IsEnabled         = true;
@@ -70,21 +70,21 @@ namespace klauncher
                         break;
 
                     case LauncherState.Paused:
-                        TxtTitle.Text              = "DESCARGA PAUSADA";
-                        TxtPauseButton.Text        = "Reanudar";
+                        TxtTitle.Text              = "DOWNLOAD PAUSED";
+                        TxtPauseButton.Text        = "Resume";
                         IconPause.Visibility       = Visibility.Collapsed;
                         IconPlay.Visibility        = Visibility.Visible;
                         BtnPause.IsEnabled         = true;
-                        TxtSpeed.Text              = "Pausado";
-                        TxtEta.Text                = "—";
+                        TxtSpeed.Text              = "Paused";
+                        TxtEta.Text                = "\u2014";
                         ActiveDotGrid.Visibility   = Visibility.Collapsed;
                         PausedDotGrid.Visibility   = Visibility.Visible;
                         break;
 
                     case LauncherState.Extracting:
-                        TxtTitle.Text              = "DESCOMPRIMIENDO GTA V - VMP Edition";
+                        TxtTitle.Text              = "EXTRACTING GTA V - VMP Edition";
                         BtnPause.IsEnabled         = false;
-                        TxtSpeed.Text              = "Extrayendo…";
+                        TxtSpeed.Text              = "Extracting...";
                         TxtEta.Text                = "";
                         ActiveDotGrid.Visibility   = Visibility.Visible;
                         PausedDotGrid.Visibility   = Visibility.Collapsed;
@@ -130,16 +130,16 @@ namespace klauncher
             {
                 if (eta == TimeSpan.MaxValue || eta.TotalSeconds <= 0)
                 {
-                    TxtEta.Text = "Calculando…";
+                    TxtEta.Text = "Calculating...";
                     return;
                 }
 
                 if (eta.TotalHours >= 1)
-                    TxtEta.Text = $"{(int)eta.TotalHours}h {eta.Minutes:D2}m restantes";
+                    TxtEta.Text = $"{(int)eta.TotalHours}h {eta.Minutes:D2}m remaining";
                 else if (eta.TotalMinutes >= 1)
-                    TxtEta.Text = $"{(int)eta.TotalMinutes}m {eta.Seconds:D2}s restantes";
+                    TxtEta.Text = $"{(int)eta.TotalMinutes}m {eta.Seconds:D2}s remaining";
                 else
-                    TxtEta.Text = $"{(int)eta.TotalSeconds}s restantes";
+                    TxtEta.Text = $"{(int)eta.TotalSeconds}s remaining";
             });
         }
 
@@ -165,7 +165,7 @@ namespace klauncher
         {
             Dispatcher.Invoke(() =>
             {
-                MessageBox.Show(errorMessage, "Error de Instalador", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(errorMessage, "Installer Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 TxtFileName.Text = $"Error: {errorMessage}";
             });
         }

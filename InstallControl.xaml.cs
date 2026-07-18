@@ -56,7 +56,7 @@ namespace klauncher
             string path = TxtInstallPath.Text;
             if (string.IsNullOrWhiteSpace(path))
             {
-                MessageBox.Show("Por favor ingresa una ruta de instalación válida.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Please enter a valid installation path.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -88,15 +88,15 @@ namespace klauncher
 
         private async void DxInstall_Click(object sender, MouseButtonEventArgs e)
         {
-            MessageBox.Show("Iniciando la descarga e instalación de DirectX. Siga las instrucciones del instalador.", "Instalar DirectX", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("Starting DirectX download and installation. Follow the installer instructions.", "Install DirectX", MessageBoxButton.OK, MessageBoxImage.Information);
             await _launcherService.InstallDirectXAsync();
         }
 
         private async void VcInstall_Click(object sender, MouseButtonEventArgs e)
         {
-            MessageBox.Show("Iniciando la descarga e instalación de Visual C++ Redistributable en segundo plano.", "Instalar Visual C++", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("Starting Visual C++ Redistributable download and installation in background.", "Install Visual C++", MessageBoxButton.OK, MessageBoxImage.Information);
             await _launcherService.InstallVcRedistAsync();
-            MessageBox.Show("VC++ Redistributable instalado con éxito.", "Finalizado", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("VC++ Redistributable installed successfully.", "Done", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 }

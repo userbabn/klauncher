@@ -1,139 +1,157 @@
-# KLAUNCHER: GTA V + VMP Edition 🐨🎮
+# KLAUNCHER - GTA V VMP Edition
 
-[Español](#es) | [English](#en) | [فارسی](#fa)
+[English](#english) | [فارسی](#farsi)
 
 ---
 
-<a name="es"></a>
-## 🇪🇸 Español
+<a name="english"></a>
+## English
 
-Lanzador (Launcher) de código abierto para Windows desarrollado en C# y WPF bajo **.NET 10**. Permite a los usuarios descargar, verificar y descomprimir de manera totalmente automatizada el instalador dividido en 29 partes de GTA V (VMP Edition), así como instalar los requisitos del juego.
+An open-source Windows launcher for **GTA V VMP Edition**, built with **C# / WPF / .NET 10**. Download, extract, and launch GTA V VMP Edition with a single click.
 
-### 🎨 Características Principales
-*   **Diseño Premium y Moderno:** Interfaz sin bordes (Borderless Window) con efectos de cristal, gradientes morados y rosa neón, barra de título personalizada para arrastrar, logo de un **Koala Gamer** con iluminación de sombra dinámica e indicadores visuales de descarga LED neón animados.
-*   **Gestor de Descargas con Pausa, Resumen y Auto-reanudación:** Descarga secuencial de las 29 partes de 2.4 GB (~70 GB en total). Si se cae la conexión o el usuario pulsa **Pausar**, la descarga se puede reanudar desde el byte exacto donde se detuvo. Al cerrar y reabrir el launcher, este detecta el progreso e inicia la descarga automáticamente.
-*   **Optimizaciones de I/O de Alto Rendimiento:** Pre-asignación de tamaño de archivos en disco al descargar y extraer para reducir la fragmentación en HDDs e incrementar las velocidades de escritura.
-*   **Descompresión y Limpieza Automática:** Al finalizar la descarga, descomprime automáticamente la secuencia completa usando la librería `SharpCompress` con buffers optimizados a 256 KB. **Los archivos `.rar` son eliminados automáticamente** al terminar la extracción, recuperando ~70 GB de espacio.
-*   **Discord Rich Presence:** Muestra en tiempo real el estado del launcher en Discord: menú principal, descargando (con parte actual, velocidad y tiempo restante), extrayendo, jugando o completado.
-*   **Instalador de Requisitos:** Automatiza la descarga e instalación silenciosa de DirectX 11 Runtime y Visual C++ Redistributable 2015-2022.
+### Features
 
-### 🛠️ Requisitos de Desarrollo
-*   **Windows OS** (10 u 11 recomendado).
-*   **.NET 10 SDK** o superior instalado.
-*   Visual Studio 2022 o VS Code con C# Dev Kit.
+- **Modern Premium UI** - Borderless window with glassmorphism effects, neon purple/pink gradients, custom title bar, animated Koala Gamer logo with dynamic glow
+- **Download Manager with Pause/Resume** - Sequential download of 29 RAR parts (~70 GB total) with per-byte resume capability. Auto-resumes on launcher restart
+- **Animated Download Indicator** - Pulsing LED status dot and animated cloud download icon clearly show active download state
+- **Automatic Extraction** - Extracts all RAR parts using SharpCompress with optimized 256 KB buffers. RAR files are auto-deleted after extraction (~70 GB freed)
+- **Discord Rich Presence** - Real-time Discord status: menu, downloading (part/speed/ETA), paused, extracting, playing, or completed
+- **Prerequisites Installer** - One-click silent install of DirectX 11 Runtime and Visual C++ Redistributable 2015-2022
+- **High-Performance I/O** - Disk space pre-allocation with `SetLength` to reduce HDD fragmentation during download and extraction
+- **Smart Resume on Restart** - Closing and reopening the launcher detects incomplete downloads and resumes automatically from where it left off
 
-### 🚀 Instrucciones Paso a Paso para Compilar y Ejecutar
+### Requirements
 
-#### 1. Clonar el repositorio
-```powershell
+- **Windows 10/11**
+- **.NET 10 SDK** or higher
+- Visual Studio 2022 or VS Code with C# Dev Kit
+
+### Build & Run
+
+```bash
+# Clone
 git clone https://github.com/userbabn/klauncher.git
-```
-#### 2. Restaurar dependencias de NuGet
-```powershell
+cd klauncher
+
+# Restore dependencies
 dotnet restore
-```
-#### 3. Ejecutar en modo desarrollo
-```powershell
+
+# Run in development
 dotnet run
-```
-#### 4. Compilar en modo Release (Carpeta)
-```powershell
+
+# Build Release
 dotnet build -c Release
-```
-#### 5. Publicación del Ejecutable Único (`.exe` Portátil)
-```powershell
+
+# Publish single portable .exe
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFileBundle=true
 ```
 
+### Project Structure
+
+```
+klauncher/
+  MainWindow.xaml/.cs          # Main window with sidebar navigation and news panel
+  InstallControl.xaml/.cs      # Installation folder picker and download trigger
+  DownloadProgressControl.xaml/.cs  # Download progress bars, speed, ETA, pause button
+  ConfirmDialog.xaml/.cs       # Download confirmation dialog
+  LauncherService.cs           # Core download/extraction engine with resume support
+  DiscordService.cs            # Discord Rich Presence integration
+  koala_logo.png/.ico          # Application assets
+```
+
+### How It Works
+
+1. Click **INSTALAR** in the sidebar to open the installer
+2. Choose an installation folder and click **DESCARGAR GTA V**
+3. Confirm the download in the dialog
+4. The launcher downloads 29 RAR parts sequentially from `cdn.vmp.ir`
+5. Each part is saved with a `.tmp` extension and renamed on completion
+6. Progress is saved to `download_state.json` after each part
+7. After all parts download, RAR files are extracted automatically
+8. RAR files are deleted to free ~70 GB of disk space
+9. Click **JUGAR** to launch GTA V VMP Edition
+
+### License
+
+MIT License - Copyright (c) 2026 Koala Gamer
+
 ---
 
-<a name="en"></a>
-## 🇬🇧 English
+<a name="farsi"></a>
+## فارسی (Persian)
 
-An open-source Windows Launcher developed in C# and WPF under **.NET 10**. It enables users to download, verify, and automatically extract GTA V (VMP Edition) split into 29 parts, as well as install game prerequisites.
+لانچر متن‌باز ویندوز برای **بازی GTA V نسخه VMP Edition**، توسعه یافته با **C# / WPF / .NET 10**. دانلود، استخراج و اجرای بازی GTA V VMP Edition با یک کلیک.
 
-### 🎨 Key Features
-*   **Premium & Modern Design:** Borderless window interface with glassmorphism, purple and neon pink gradients, custom title bar for dragging, a custom **Koala Gamer** logo with dynamic drop shadow, and neon LED animated download indicators.
-*   **Download Manager with Pause, Resume & Auto-Resume:** Sequential download of 29 parts of 2.4 GB (~70 GB total). If the connection drops or the user pauses, it resumes from the exact byte. On application startup, it automatically detects incomplete downloads and resumes immediately.
-*   **High-Performance I/O Optimizations:** Disk space pre-allocation (`SetLength`) during download and extraction to prevent fragmentation on HDDs and maximize write speeds.
-*   **Automatic Extraction & Cleanup:** Automatically extracts the RAR sequence using `SharpCompress` with optimized 256 KB buffers. **All `.rar` files are automatically deleted** after extraction to free up ~70 GB of disk space.
-*   **Discord Rich Presence:** Real-time Discord status updates: main menu, downloading (with current part, speed, and ETA), extracting, playing, or completed.
-*   **Prerequisites Installer:** Automates silent download and installation of DirectX 11 Runtime and Visual C++ Redistributable 2015-2022.
+### ویژگی‌ها
 
-### 🛠️ Development Requirements
-*   **Windows OS** (10 or 11 recommended).
-*   **.NET 10 SDK** or higher installed.
-*   Visual Studio 2022 or VS Code with C# Dev Kit.
+- **رابط کاربری مدرن و پرمیوم** - پنجره بدون حاشیه با افکت‌های شیشه‌ای، گرادیان‌های بنفش و صورتی نئون، نوار عنوان سفارشی، لوگوی متحرک کوالا گیمر با درخشش پویا
+- **مدیریت دانلود با قابلیت مکث و ادامه** - دانلود متوالی ۲۹ پارت RAR (حدود ۷۰ گیگابایت) با قابلیت ادامه از بایت دقیق متوقف شده. شروع خودکار هنگام بازگشایی مجدد لانچر
+- **نشانگر دانلود متحرک** - نقطه وضعیت ال‌ای‌دی پالس‌زننده و آیکون ابری متحرک دانلود، وضعیت دانلود فعال را به وضوح نشان می‌دهد
+- **استخراج خودکار** - استخراج تمام پارت‌های RAR با SharpCompress و بافر بهینه ۲۵۶ کیلوبایتی. فایل‌های RAR پس از استخراج حذف می‌شوند (حدود ۷۰ گیگابایت آزاد)
+- **ارتباط با دیسکورد (Discord Rich Presence)** - نمایش وضعیت لحظه‌ای در دیسکورد: منو، دانلود (پارت/سرعت/زمان باقی‌مانده)، مکث، استخراج، در حال بازی یا تکمیل شده
+- **نصب پیش‌نیازها** - نصب بی‌صدا و خودکار DirectX 11 Runtime و Visual C++ Redistributable 2015-2022 با یک کلیک
+- **بهینه‌سازی I/O با کارایی بالا** - تخصیص پیشاپیش فضای دیسک با `SetLength` برای کاهش تکه‌تکه شدن HDD هنگام دانلود و استخراج
+- **شروع خودکار از سرگیری** - با بستن و باز کردن مجدد لانچر، دانلودهای ناقص شناسایی و به طور خودکار از همان نقطه ادامه می‌یابند
 
-### 🚀 Build and Run Instructions
+### نیازمندی‌ها
 
-#### 1. Clone the repository
-```powershell
+- **ویندوز ۱۰/۱۱**
+- **اس‌دی‌کی .NET 10** یا بالاتر
+- ویژوال استودیو ۲۰۲۲ یا VS Code با C# Dev Kit
+
+### کامپایل و اجرا
+
+```bash
+# کلون کردن
 git clone https://github.com/userbabn/klauncher.git
-```
-#### 2. Restore NuGet dependencies
-```powershell
+cd klauncher
+
+# بازیابی پکیج‌ها
 dotnet restore
-```
-#### 3. Run in development mode
-```powershell
+
+# اجرا در حالت توسعه
 dotnet run
-```
-#### 4. Build in Release mode (Folder)
-```powershell
+
+# کامپایل Release
 dotnet build -c Release
-```
-#### 5. Publish Single Portable Executable (`.exe`)
-```powershell
+
+# خروجی تک فایل پرتابل (.exe)
 dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFileBundle=true
 ```
 
----
+### ساختار پروژه
 
-<a name="fa"></a>
-## 🇮🇷 فارسی (Persian)
-
-لانچر متن‌باز ویندوز برای بازی GTA V نسخه VMP Edition توسعه یافته با زبان سی‌شارپ (#C) و WPF تحت فریم‌ورک **NET 10.**. این برنامه به کاربران اجازه می‌دهد بازی تقسیم شده به ۲۹ پارت (حدود ۷۰ گیگابایت) را به‌صورت کاملاً خودکار دانلود، تأیید و استخراج کرده و پیش‌نیازهای بازی را نصب کنند.
-
-### 🎨 ویژگی‌های اصلی
-*   **طراحی نئون و پرمیوم:** رابط کاربری بدون حاشیه (Borderless) با افکت‌های شیشه‌ای، طیف‌های رنگی بنفش و صورتی نئون، لوگوی اختصاصی کوالا گیمر به همراه سایه داینامیک و چراغ‌های وضعیت ال‌ای‌دی متحرک.
-*   **مدیریت دانلود با قابلیت مکث، ادامه و شروع خودکار:** دانلود متوالی ۲۹ پارت ۲.۴ گیگابایتی. در صورت قطع اتصال یا کلیک بر روی دکمه مکث، دانلود از بایت دقیق متوقف شده ادامه می‌یابد. همچنین با باز کردن مجدد لانچر، فرآیند دانلود به‌طور خودکار از سر گرفته می‌شود.
-*   **بهینه‌سازی نوشتن روی دیسک (I/O Optimizations):** تخصیص پیشاپیش فضای دیسک (`SetLength`) هنگام دانلود و استخراج فایل‌ها برای جلوگیری از تکه‌تکه شدن هارد دیسک (HDD) و افزایش سرعت ذخیره‌سازی.
-*   **استخراج و پاکسازی خودکار فایل‌ها:** استخراج خودکار پارت‌های RAR با استفاده از کتابخانه `SharpCompress` با بافر بهینه‌سازی شده ۲۵۶ کیلوبایتی. پس از اتمام استخراج، **فایل‌های فشرده RAR به طور خودکار حذف می‌شوند** تا ۷۰ گیگابایت فضای خالی دیسک آزاد شود.
-*   **ارتباط با دیسکورد (Discord Rich Presence):** نمایش وضعیت در دیسکورد به همراه مشخصات پارت در حال دانلود، سرعت دانلود، زمان باقی‌مانده و دکمه ورود به دیسکورد سرور.
-*   **نصب خودکار پیش‌نیازها:** دانلود و نصب کاملاً بی‌صدا و پس‌زمینه DirectX 11 و Visual C++ Redistributable 2015-2022.
-
-### 🛠️ نیازمندی‌های توسعه
-*   **ویندوز** (نسخه ۱۰ یا ۱۱ پیشنهاد می‌شود).
-*   **اس‌دی‌کی دات‌نت ۱۰** (.NET 10 SDK) یا بالاتر.
-*   ویژوال استودیو ۲۰۲۲ یا VS Code به همراه C# Dev Kit.
-
-### 🚀 راهنمای کامپایل و اجرا
-
-#### ۱. کلون کردن مخزن
-```powershell
-git clone https://github.com/userbabn/klauncher.git
 ```
-#### ۲. بازیابی پکیج‌های NuGet
-```powershell
-dotnet restore
+klauncher/
+  MainWindow.xaml/.cs          # پنجره اصلی با نوار کناری و پنل اخبار
+  InstallControl.xaml/.cs      # انتخاب پوشه نصب و شروع دانلود
+  DownloadProgressControl.xaml/.cs  # نوار پیشرفت، سرعت، زمان باقی‌مانده، دکمه مکث
+  ConfirmDialog.xaml/.cs       # دیالوگ تایید دانلود
+  LauncherService.cs           # موتور دانلود/استخراج با پشتیبانی از ادامه
+  DiscordService.cs            # ارتباط Discord Rich Presence
+  koala_logo.png/.ico          # دارایی‌های برنامه
 ```
-#### ۳. اجرا در حالت توسعه
-```powershell
-dotnet run
-```
-#### ۴. کامپایل در حالت Release (پوشه)
-```powershell
-dotnet build -c Release
-```
-#### ۵. خروجی گرفتن به‌صورت تک فایل پرتابل (`.exe`)
-```powershell
-dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFileBundle=true
-```
+
+### نحوه کار
+
+1. روی **INSTALAR** در نوار کناری کلیک کنید تا نصب‌کننده باز شود
+2. پوشه نصب را انتخاب کنید و روی **DESCARGAR GTA V** کلیک کنید
+3. دانلود را در دیالوگ تایید کنید
+4. لانچر ۲۹ پارت RAR را به صورت متوالی از `cdn.vmp.ir` دانلود می‌کند
+5. هر پارت با پسوند `.tmp` ذخیره و پس از تکمیل تغییر نام می‌یابد
+6. پیشرفت پس از هر پارت در `download_state.json` ذخیره می‌شود
+7. پس از دانلود تمام پارت‌ها، فایل‌های RAR به طور خودکار استخراج می‌شوند
+8. فایل‌های RAR برای آزادسازی حدود ۷۰ گیگابایت فضا حذف می‌شوند
+9. روی **JUGAR** کلیک کنید تا GTA V VMP Edition اجرا شود
+
+### لایسنس
+
+لایسنس MIT - کپی‌رایت (c) 2026 Koala Gamer
 
 ---
 
-## 🤝 Contribuciones y Licencia / License & Contributions / مشارکت و لایسنس
-This project is open-source under the **MIT License**. Feel free to fork and modify it.  
-Este proyecto es de código abierto bajo la licencia **MIT**.  
-این پروژه متن‌باز تحت لایسنس **MIT** منتشر شده است.
+## Contributing / مشارکت
+
+This project is open-source under the **MIT License**. Feel free to fork and modify.
+
+این پروژه متن‌باز تحت لایسنس **MIT** منتشر شده است. آزادانه فورک و تغییر دهید.

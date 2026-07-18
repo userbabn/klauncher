@@ -1,7 +1,7 @@
 <Window x:Class="klauncher.ConfirmDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Descargar GTA V" 
+        Title="Download GTA V" 
         Height="250" Width="440"
         WindowStartupLocation="CenterOwner"
         WindowStyle="None"
@@ -69,38 +69,38 @@
 
                 <!-- Text content -->
                 <StackPanel Grid.Column="1" VerticalAlignment="Top">
-                    <TextBlock Text="DESCARGAR GTA V COMPLETO" 
+                    <TextBlock Text="DOWNLOAD GTA V FULL GAME" 
                                Foreground="White" 
                                FontFamily="Segoe UI" 
                                FontWeight="Bold" 
                                FontSize="15" 
                                Margin="0,0,0,10" />
 
-                    <TextBlock Text="Esto descargará 29 archivos .rar:" 
+                    <TextBlock Text="This will download 29 .rar files:" 
                                Foreground="#a5a1c0" 
                                FontFamily="Segoe UI" 
                                FontSize="12" 
                                Margin="0,0,0,5" />
 
-                    <TextBlock Text="• Tamaño total: ~70 GB" 
+                    <TextBlock Text="• Total size: ~70 GB" 
                                Foreground="#a5a1c0" 
                                FontFamily="Segoe UI" 
                                FontSize="12" 
                                Margin="10,0,0,2" />
 
-                    <TextBlock Text="• Se descomprimirá automáticamente" 
+                    <TextBlock Text="• Will extract automatically" 
                                Foreground="#a5a1c0" 
                                FontFamily="Segoe UI" 
                                FontSize="12" 
                                Margin="10,0,0,2" />
 
-                    <TextBlock Text="• Tiempo: Varias horas" 
+                    <TextBlock Text="• Time: Several hours" 
                                Foreground="#a5a1c0" 
                                FontFamily="Segoe UI" 
                                FontSize="12" 
                                Margin="10,0,0,10" />
 
-                    <TextBlock Text="¿Seguro que quieres continuar?" 
+                    <TextBlock Text="Are you sure you want to continue?" 
                                Foreground="White" 
                                FontFamily="Segoe UI" 
                                FontWeight="SemiBold" 
@@ -111,7 +111,7 @@
 
             <!-- Buttons Area -->
             <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
-                <Button Content="Sí" Style="{StaticResource DialogButtonStyle}" Width="90" Click="Yes_Click" Margin="0,0,10,0" IsDefault="True"/>
+                <Button Content="Yes" Style="{StaticResource DialogButtonStyle}" Width="90" Click="Yes_Click" Margin="0,0,10,0" IsDefault="True"/>
                 <Button Content="No" Style="{StaticResource DialogButtonStyle}" Width="90" Click="No_Click" IsCancel="True"/>
             </StackPanel>
         </Grid>

@@ -39,7 +39,8 @@ namespace klauncher
         private static readonly HttpClient _httpClient = new HttpClient(new HttpClientHandler
         {
             AutomaticDecompression = System.Net.DecompressionMethods.All,
-            MaxConnectionsPerServer = 4   // allow parallel streams per host
+            MaxConnectionsPerServer = 4,   // allow parallel streams per host
+            MaxAutomaticRedirections = 5
         })
         {
             Timeout = TimeSpan.FromHours(2),
@@ -50,12 +51,15 @@ namespace klauncher
         static LauncherService()
         {
             _httpClient.DefaultRequestHeaders.ConnectionClose = false;  // Keep-Alive
+            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "KLauncher/2.0");
         }
 
         // ── Constants ────────────────────────────────────────────────────────────
         private const int    TotalParts      = 29;
         private const string UrlTemplate     = "https://cdn.vmp.ir/game/1/Grand.Theft.Auto.V.VMP.Edition.part{0:D2}.rar";
-        private const int    BufferSize      = 131072;  // 128 KB – faster than 8 KB
+        private const int    BufferSize      = 262144;  // 256 KB – optimal for large file I/O
+        private const int    MaxRetries      = 5;       // retry failed downloads up to 5 times
+        private const int    RetryDelayMs    = 2000;    // 2 seconds between retries
         private const string StateFileName   = "download_state.json";
 
         // ── State ────────────────────────────────────────────────────────────────
@@ -153,7 +157,7 @@ namespace klauncher
                 _isPaused = true;
                 _downloadCts?.Cancel();
                 State = LauncherState.Paused;
-                StatusMessageChanged?.Invoke("Descarga pausada.");
+                StatusMessageChanged?.Invoke("Download paused.");
             }
         }
 
@@ -163,7 +167,7 @@ namespace klauncher
             {
                 _isPaused = false;
                 _cancelRequested = false;
-                StatusMessageChanged?.Invoke("Reanudando descarga...");
+                StatusMessageChanged?.Invoke("Resuming download...");
                 Task.Run(() => RunDownloadAndInstallWorkflowAsync(targetFolder));
             }
         }
@@ -173,7 +177,7 @@ namespace klauncher
             _cancelRequested = true;
             _downloadCts?.Cancel();
             State = LauncherState.Idle;
-            StatusMessageChanged?.Invoke("Operación cancelada.");
+            StatusMessageChanged?.Invoke("Operation cancelled.");
         }
 
         /// <summary>
@@ -193,7 +197,7 @@ namespace klauncher
             {
                 _completedParts       = saved.CompletedParts;
                 _totalBytesDownloaded = saved.TotalBytesDownloaded;
-                StatusMessageChanged?.Invoke($"Reanudando desde la parte {_completedParts + 1}/{TotalParts}...");
+                StatusMessageChanged?.Invoke($"Resuming from part {_completedParts + 1}/{TotalParts}...");
             }
             else
             {
@@ -226,25 +230,25 @@ namespace klauncher
 
                 // Extract
                 State = LauncherState.Extracting;
-                StatusMessageChanged?.Invoke("Descomprimiendo archivos… Esto puede tardar varios minutos.");
+                StatusMessageChanged?.Invoke("Extracting files... This may take several minutes.");
 
                 bool extractSuccess = await ExtractAllPartsAsync(targetFolder);
                 if (extractSuccess)
                 {
                     DeleteState();  // clean up persisted state
                     State = LauncherState.Completed;
-                    StatusMessageChanged?.Invoke("¡Instalación completada con éxito!");
+                    StatusMessageChanged?.Invoke("Installation completed successfully!");
                 }
                 else
                 {
                     State = LauncherState.Error;
-                    ErrorOccurred?.Invoke("Error al extraer los archivos de instalación.");
+                    ErrorOccurred?.Invoke("Error extracting installation files.");
                 }
             }
             catch (Exception ex)
             {
                 State = LauncherState.Error;
-                ErrorOccurred?.Invoke($"Error general: {ex.Message}");
+                ErrorOccurred?.Invoke($"General error: {ex.Message}");
             }
         }
 
@@ -268,7 +272,7 @@ namespace klauncher
                 string finalPath = Path.Combine(targetFolder, fileName);
                 string tempPath  = finalPath + ".tmp";
 
-                StatusMessageChanged?.Invoke($"Descargando parte {partNum}/{TotalParts}…");
+                StatusMessageChanged?.Invoke($"Downloading part {partNum}/{TotalParts}...");
                 PartDownloadStarted?.Invoke(partNum, TotalParts);
 
                 // If final RAR already exists skip it
@@ -304,100 +308,110 @@ namespace klauncher
 
         private async Task<bool> DownloadFileWithResumeAsync(string url, string tempPath, CancellationToken token, int partNum = 0)
         {
-            long existingLength = 0;
-            if (File.Exists(tempPath))
-                existingLength = new FileInfo(tempPath).Length;
-
-            try
+            for (int attempt = 1; attempt <= MaxRetries; attempt++)
             {
-                var request = new HttpRequestMessage(HttpMethod.Get, url);
-                if (existingLength > 0)
-                    request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(existingLength, null);
+                long existingLength = 0;
+                if (File.Exists(tempPath))
+                    existingLength = new FileInfo(tempPath).Length;
 
-                HttpResponseMessage response = await _httpClient.SendAsync(
-                    request, HttpCompletionOption.ResponseHeadersRead, token);
-
-                bool appendMode = existingLength > 0 && response.StatusCode == System.Net.HttpStatusCode.PartialContent;
-                if (!appendMode && existingLength > 0)
+                try
                 {
-                    existingLength = 0;
-                    if (File.Exists(tempPath)) File.Delete(tempPath);
-                }
+                    var request = new HttpRequestMessage(HttpMethod.Get, url);
+                    if (existingLength > 0)
+                        request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(existingLength, null);
 
-                long? contentLength = response.Content.Headers.ContentLength;
-                long totalBytes     = (contentLength ?? 0) + existingLength;
+                    HttpResponseMessage response = await _httpClient.SendAsync(
+                        request, HttpCompletionOption.ResponseHeadersRead, token);
 
-                using var responseStream = await response.Content.ReadAsStreamAsync(token);
-                using var fileStream     = new FileStream(
-                    tempPath,
-                    appendMode ? FileMode.Append : FileMode.Create,
-                    FileAccess.Write, FileShare.None, BufferSize, true);
-
-                if (!appendMode && contentLength.HasValue)
-                {
-                    fileStream.SetLength(contentLength.Value); // Pre-allocate to reduce fragmentation
-                }
-
-                byte[] buffer             = new byte[BufferSize];
-                int    bytesRead;
-                long   currentBytesDownloaded = existingLength;
-
-                var    stopwatch      = Stopwatch.StartNew();
-                long   lastBytesRead  = 0;
-
-                while ((bytesRead = await responseStream.ReadAsync(buffer, 0, buffer.Length, token)) > 0)
-                {
-                    if (token.IsCancellationRequested || _isPaused || _cancelRequested)
-                        return false;
-
-                    await fileStream.WriteAsync(buffer, 0, bytesRead, token);
-                    currentBytesDownloaded += bytesRead;
-
-                    // Update speed & ETA every ~500 ms
-                    if (stopwatch.ElapsedMilliseconds >= 500)
+                    bool appendMode = existingLength > 0 && response.StatusCode == System.Net.HttpStatusCode.PartialContent;
+                    if (!appendMode && existingLength > 0)
                     {
-                        double seconds          = stopwatch.Elapsed.TotalSeconds;
-                        long   bytesDelta       = (currentBytesDownloaded - existingLength) - lastBytesRead;
-                        double instantSpeed     = bytesDelta / seconds;
-
-                        // Exponential moving average
-                        _sessionSpeedEMA = (_sessionSpeedEMA == 0)
-                            ? instantSpeed
-                            : _sessionSpeedEMA * (1 - SpeedAlpha) + instantSpeed * SpeedAlpha;
-
-                        _downloadSpeed = _sessionSpeedEMA;
-
-                        lastBytesRead = currentBytesDownloaded - existingLength;
-                        stopwatch.Restart();
-
-                        // --- ETA ---
-                        long remainingBytes = EstimatedTotalBytes - _totalBytesDownloaded - (currentBytesDownloaded - existingLength);
-                        if (remainingBytes < 0) remainingBytes = 0;
-                        TimeSpan eta = (_downloadSpeed > 0)
-                            ? TimeSpan.FromSeconds(remainingBytes / _downloadSpeed)
-                            : TimeSpan.MaxValue;
-                        EstimatedTimeRemainingChanged?.Invoke(eta);
-
-                        // Progress for this file
-                        double percentage  = (totalBytes > 0) ? ((double)currentBytesDownloaded / totalBytes) * 100.0 : 0;
-                        string speedString = FormatSpeed(_downloadSpeed);
-                        DownloadProgressChanged?.Invoke(percentage, speedString);
+                        existingLength = 0;
+                        if (File.Exists(tempPath)) File.Delete(tempPath);
                     }
-                }
 
-                // 100% for this part
-                DownloadProgressChanged?.Invoke(100.0, "0.0 KB/s");
-                return true;
+                    long? contentLength = response.Content.Headers.ContentLength;
+                    long totalBytes     = (contentLength ?? 0) + existingLength;
+
+                    using var responseStream = await response.Content.ReadAsStreamAsync(token);
+                    using var fileStream     = new FileStream(
+                        tempPath,
+                        appendMode ? FileMode.Append : FileMode.Create,
+                        FileAccess.Write, FileShare.None, BufferSize, true);
+
+                    if (!appendMode && contentLength.HasValue)
+                    {
+                        fileStream.SetLength(contentLength.Value); // Pre-allocate to reduce fragmentation
+                    }
+
+                    byte[] buffer             = new byte[BufferSize];
+                    int    bytesRead;
+                    long   currentBytesDownloaded = existingLength;
+
+                    var    stopwatch      = Stopwatch.StartNew();
+                    long   lastBytesRead  = 0;
+
+                    while ((bytesRead = await responseStream.ReadAsync(buffer, 0, buffer.Length, token)) > 0)
+                    {
+                        if (token.IsCancellationRequested || _isPaused || _cancelRequested)
+                            return false;
+
+                        await fileStream.WriteAsync(buffer, 0, bytesRead, token);
+                        currentBytesDownloaded += bytesRead;
+
+                        // Update speed & ETA every ~500 ms
+                        if (stopwatch.ElapsedMilliseconds >= 500)
+                        {
+                            double seconds          = stopwatch.Elapsed.TotalSeconds;
+                            long   bytesDelta       = (currentBytesDownloaded - existingLength) - lastBytesRead;
+                            double instantSpeed     = bytesDelta / seconds;
+
+                            // Exponential moving average
+                            _sessionSpeedEMA = (_sessionSpeedEMA == 0)
+                                ? instantSpeed
+                                : _sessionSpeedEMA * (1 - SpeedAlpha) + instantSpeed * SpeedAlpha;
+
+                            _downloadSpeed = _sessionSpeedEMA;
+
+                            lastBytesRead = currentBytesDownloaded - existingLength;
+                            stopwatch.Restart();
+
+                            // --- ETA ---
+                            long remainingBytes = EstimatedTotalBytes - _totalBytesDownloaded - (currentBytesDownloaded - existingLength);
+                            if (remainingBytes < 0) remainingBytes = 0;
+                            TimeSpan eta = (_downloadSpeed > 0)
+                                ? TimeSpan.FromSeconds(remainingBytes / _downloadSpeed)
+                                : TimeSpan.MaxValue;
+                            EstimatedTimeRemainingChanged?.Invoke(eta);
+
+                            // Progress for this file
+                            double percentage  = (totalBytes > 0) ? ((double)currentBytesDownloaded / totalBytes) * 100.0 : 0;
+                            string speedString = FormatSpeed(_downloadSpeed);
+                            DownloadProgressChanged?.Invoke(percentage, speedString);
+                        }
+                    }
+
+                    // 100% for this part
+                    DownloadProgressChanged?.Invoke(100.0, "0.0 KB/s");
+                    return true; // success
+                }
+                catch (OperationCanceledException)
+                {
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    if (attempt < MaxRetries)
+                    {
+                        StatusMessageChanged?.Invoke($"Retry {attempt}/{MaxRetries} for part {partNum}...");
+                        await Task.Delay(RetryDelayMs, token);
+                        continue; // retry
+                    }
+                    ErrorOccurred?.Invoke($"Network error after {MaxRetries} retries: {ex.Message}");
+                    return false;
+                }
             }
-            catch (OperationCanceledException)
-            {
-                return false;
-            }
-            catch (Exception ex)
-            {
-                ErrorOccurred?.Invoke($"Error de red: {ex.Message}");
-                return false;
-            }
+            return false;
         }
 
         // ── Extraction ───────────────────────────────────────────────────────────
@@ -407,7 +421,7 @@ namespace klauncher
 
             if (!File.Exists(firstPartPath))
             {
-                ErrorOccurred?.Invoke("No se encontró el archivo de la parte 1 para iniciar la descompresión.");
+                ErrorOccurred?.Invoke("Part 1 file not found for extraction.");
                 return false;
             }
 
@@ -485,7 +499,7 @@ namespace klauncher
             }
             catch (Exception ex)
             {
-                ErrorOccurred?.Invoke($"Error de descompresión: {ex.Message}");
+                ErrorOccurred?.Invoke($"Extraction error: {ex.Message}");
                 return false;
             }
         }
@@ -493,7 +507,7 @@ namespace klauncher
         // ── Dependency Installers ────────────────────────────────────────────────
         public async Task<bool> InstallDirectXAsync()
         {
-            StatusMessageChanged?.Invoke("Descargando DirectX Runtime…");
+            StatusMessageChanged?.Invoke("Downloading DirectX Runtime...");
             string tempDir = Path.Combine(Path.GetTempPath(), "KLauncher_Setup");
             if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
 
@@ -506,7 +520,7 @@ namespace klauncher
                 using (var fs   = new FileStream(dxSetupPath, FileMode.Create, FileAccess.Write))
                     await resp.Content.CopyToAsync(fs);
 
-                StatusMessageChanged?.Invoke("Ejecutando instalador de DirectX…");
+                StatusMessageChanged?.Invoke("Running DirectX installer...");
                 var process = Process.Start(new ProcessStartInfo
                 {
                     FileName       = dxSetupPath,
@@ -517,20 +531,20 @@ namespace klauncher
                 if (process != null)
                 {
                     await process.WaitForExitAsync();
-                    StatusMessageChanged?.Invoke("DirectX instalado o actualizado.");
+                    StatusMessageChanged?.Invoke("DirectX installed or updated.");
                     return true;
                 }
             }
             catch (Exception ex)
             {
-                ErrorOccurred?.Invoke($"Error al instalar DirectX: {ex.Message}");
+                ErrorOccurred?.Invoke($"DirectX install error: {ex.Message}");
             }
             return false;
         }
 
         public async Task<bool> InstallVcRedistAsync()
         {
-            StatusMessageChanged?.Invoke("Descargando Visual C++ Redistributable…");
+            StatusMessageChanged?.Invoke("Downloading Visual C++ Redistributable...");
             string tempDir = Path.Combine(Path.GetTempPath(), "KLauncher_Setup");
             if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
 
@@ -543,7 +557,7 @@ namespace klauncher
                 using (var fs   = new FileStream(vcRedistPath, FileMode.Create, FileAccess.Write))
                     await resp.Content.CopyToAsync(fs);
 
-                StatusMessageChanged?.Invoke("Ejecutando instalador de Visual C++…");
+                StatusMessageChanged?.Invoke("Running Visual C++ installer...");
                 var process = Process.Start(new ProcessStartInfo
                 {
                     FileName        = vcRedistPath,
@@ -554,13 +568,13 @@ namespace klauncher
                 if (process != null)
                 {
                     await process.WaitForExitAsync();
-                    StatusMessageChanged?.Invoke("Visual C++ Redistributable 2015-2022 instalado.");
+                    StatusMessageChanged?.Invoke("Visual C++ Redistributable 2015-2022 installed.");
                     return true;
                 }
             }
             catch (Exception ex)
             {
-                ErrorOccurred?.Invoke($"Error al instalar Visual C++: {ex.Message}");
+                ErrorOccurred?.Invoke($"Visual C++ install error: {ex.Message}");
             }
             return false;
         }

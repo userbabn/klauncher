@@ -163,7 +163,7 @@
             </Grid>
 
             <TextBlock x:Name="TxtTitle"
-                       Text="DESCARGANDO GTA V - VMP Edition"
+                       Text="DOWNLOADING GTA V - VMP Edition"
                        Foreground="#8250df"
                        FontWeight="Bold"
                        FontSize="18"
@@ -175,7 +175,7 @@
         <Border BorderBrush="#4c3b7a" BorderThickness="0,0,0,1" Margin="0,0,0,20"/>
 
         <!-- Per-file progress bar label -->
-        <TextBlock Text="Progreso del archivo actual"
+        <TextBlock Text="Current file progress"
                    Foreground="#6a6486" FontSize="11" FontFamily="Segoe UI"
                    Margin="0,0,0,4"/>
 
@@ -186,7 +186,7 @@
                      Margin="0,0,0,6"/>
 
         <!-- Total progress bar label -->
-        <TextBlock Text="Progreso total de descarga"
+        <TextBlock Text="Total download progress"
                    Foreground="#6a6486" FontSize="11" FontFamily="Segoe UI"
                    Margin="0,6,0,4"/>
 
@@ -198,7 +198,7 @@
 
         <!-- Status / filename -->
         <TextBlock x:Name="TxtFileName"
-                   Text="Preparando descarga…"
+                   Text="Preparing download..."
                    Foreground="#a5a1c0"
                    FontSize="12"
                    HorizontalAlignment="Center"
@@ -217,7 +217,7 @@
                        FontFamily="Segoe UI"/>
             <TextBlock Text=" • " Foreground="#55506a" FontSize="14" FontFamily="Segoe UI"/>
             <TextBlock x:Name="TxtEta"
-                       Text="Calculando…"
+                       Text="Calculating..."
                        Foreground="#f0b429"
                        FontWeight="SemiBold"
                        FontSize="14"
@@ -237,7 +237,7 @@
                 <Path x:Name="IconPlay" Data="M8,5v14l11-7L8,5z"
                       Fill="Black" Width="12" Height="12" Stretch="Uniform"
                       Margin="0,0,8,0" VerticalAlignment="Center" Visibility="Collapsed"/>
-                <TextBlock x:Name="TxtPauseButton" Text="Pausar" VerticalAlignment="Center"/>
+                <TextBlock x:Name="TxtPauseButton" Text="Pause" VerticalAlignment="Center"/>
             </StackPanel>
         </Button>
 
