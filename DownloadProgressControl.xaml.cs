@@ -82,13 +82,13 @@ namespace klauncher
                         break;
 
                     case LauncherState.Extracting:
-                        TxtTitle.Text              = "EXTRACTING GTA V - VMP Edition";
+                        TxtTitle.Text              = "RUNNING SETUP";
                         BtnPause.IsEnabled         = false;
-                        TxtSpeed.Text              = "Extracting...";
+                        TxtSpeed.Text              = "Launching installer...";
                         TxtEta.Text                = "";
                         ActiveDotGrid.Visibility   = Visibility.Visible;
                         PausedDotGrid.Visibility   = Visibility.Collapsed;
-                        PulsingDot.Fill            = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString("#e91e63");
+                        PulsingDot.Fill            = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString("#2ecc71");
                         break;
 
                     case LauncherState.Completed:

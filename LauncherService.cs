@@ -1,15 +1,12 @@
 using System;
 using System.IO;
 using System.Net.Http;
+using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Diagnostics;
-using SharpCompress.Archives;
-using SharpCompress.Archives.Rar;
-using SharpCompress.Common;
-using System.Collections.Generic;
 using System.Text.Json;
-using System.Linq;
+using System.Text.RegularExpressions;
+using System.Collections.Generic;
 
 namespace klauncher
 {
@@ -23,79 +20,49 @@ namespace klauncher
         Error
     }
 
-    /// <summary>
-    /// Persisted state written to disk so a crash/accidental close can be resumed.
-    /// </summary>
     public class DownloadState
     {
-        public int CompletedParts { get; set; } = 0;
-        public long TotalBytesDownloaded { get; set; } = 0;
-        public DateTime SessionStart { get; set; } = DateTime.UtcNow;
+        public int CompletedFiles { get; set; } = 0;
+        public int TotalFiles { get; set; } = 0;
         public string TargetFolder { get; set; } = string.Empty;
+        public DateTime SessionStart { get; set; } = DateTime.UtcNow;
     }
 
     public class LauncherService
     {
-        // ── HTTP Client ──────────────────────────────────────────────────────────
-        private static readonly HttpClient _httpClient = new HttpClient(new HttpClientHandler
-        {
-            AutomaticDecompression = System.Net.DecompressionMethods.All,
-            MaxConnectionsPerServer = 8,
-            MaxAutomaticRedirections = 5
-        })
-        {
-            Timeout = TimeSpan.FromHours(4),
-            DefaultRequestVersion = new Version(2, 0),
-            DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower
-        };
+        // ── Paths ────────────────────────────────────────────────────────────────
+        private static readonly string BaseDir = AppDomain.CurrentDomain.BaseDirectory;
+        private static readonly string Aria2Path = Path.Combine(BaseDir, "aria2c.exe");
+        private static readonly string Aria2Conf = Path.Combine(BaseDir, "aria2.conf");
+        private const string StateFileName = "download_state.json";
 
-        static LauncherService()
-        {
-            _httpClient.DefaultRequestHeaders.ConnectionClose = false;
-            _httpClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "KLauncher/2.0");
-        }
-
-        // ── Constants ────────────────────────────────────────────────────────────
-        private const int    TotalParts       = 29;
-        private const string UrlTemplate      = "https://cdn.vmp.ir/game/1/Grand.Theft.Auto.V.VMP.Edition.part{0:D2}.rar";
-        private const int    BufferSize       = 262144;  // 256 KB
-        private const int    MaxRetries       = 5;
-        private const int    RetryDelayMs     = 2000;
-        private const int    ParallelDownloads = 4;       // download 4 parts simultaneously
-        private const string StateFileName    = "download_state.json";
+        // ── Config ───────────────────────────────────────────────────────────────
+        private const string BaseUrl = "https://cdn.vmp.ir/game/1/GTA_V_VMP_Setup";
+        private const string SetupExe = "setup.exe";
 
         // ── State ────────────────────────────────────────────────────────────────
-        private LauncherState _state    = LauncherState.Idle;
-        private bool _isPaused          = false;
-        private bool _cancelRequested   = false;
-        private CancellationTokenSource? _downloadCts;
+        private LauncherState _state = LauncherState.Idle;
+        private bool _isPaused = false;
+        private bool _cancelRequested = false;
+        private Process? _aria2Process;
+        private CancellationTokenSource? _cts;
 
-        // Progress tracking
-        private long   _totalBytesDownloaded = 0;
-        private double _downloadSpeed        = 0;
-        private int    _completedParts       = 0;
-        private readonly object _lock = new object();
-
-        // ETA tracking
-        private double _sessionSpeedEMA = 0;
-        private const double SpeedAlpha = 0.08;
-        private const long   EstimatedTotalBytes = 70L * 1024 * 1024 * 1024; // ~70 GB
-
-        // Per-part progress for parallel downloads
-        private long[] _partBytesDownloaded = new long[TotalParts + 1];
-        private Stopwatch[] _partStopwatches = new Stopwatch[TotalParts + 1];
+        // Progress
+        private int _completedFiles = 0;
+        private int _totalFiles = 0;
+        private long _totalBytesDownloaded = 0;
+        private double _downloadSpeed = 0;
 
         // ── Events ───────────────────────────────────────────────────────────────
-        public event Action<LauncherState>?        StateChanged;
-        public event Action<double, string>?       DownloadProgressChanged;
-        public event Action<double>?               TotalDownloadProgressChanged;
-        public event Action<int, int>?             PartDownloadStarted;
-        public event Action<string, double>?       ExtractionProgressChanged;
-        public event Action<string>?               StatusMessageChanged;
-        public event Action<string>?               ErrorOccurred;
-        public event Action<TimeSpan>?             EstimatedTimeRemainingChanged;
+        public event Action<LauncherState>? StateChanged;
+        public event Action<double, string>? DownloadProgressChanged;    // (%, speed)
+        public event Action<double>? TotalDownloadProgressChanged;
+        public event Action<int, int>? PartDownloadStarted;
+        public event Action<string, double>? ExtractionProgressChanged;
+        public event Action<string>? StatusMessageChanged;
+        public event Action<string>? ErrorOccurred;
+        public event Action<TimeSpan>? EstimatedTimeRemainingChanged;
 
-        // ── Public Properties ────────────────────────────────────────────────────
         public LauncherState State
         {
             get => _state;
@@ -109,11 +76,20 @@ namespace klauncher
             }
         }
 
-        // ── State File Helpers ───────────────────────────────────────────────────
+        // ── State persistence ────────────────────────────────────────────────────
         private static string GetStateFilePath() =>
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, StateFileName);
+            Path.Combine(BaseDir, StateFileName);
 
-        public DownloadState? GetSavedState() => LoadState();
+        public DownloadState? GetSavedState()
+        {
+            try
+            {
+                string path = GetStateFilePath();
+                if (!File.Exists(path)) return null;
+                return JsonSerializer.Deserialize<DownloadState>(File.ReadAllText(path));
+            }
+            catch { return null; }
+        }
 
         private void SaveState(string targetFolder)
         {
@@ -121,26 +97,14 @@ namespace klauncher
             {
                 var st = new DownloadState
                 {
-                    CompletedParts       = _completedParts,
-                    TotalBytesDownloaded = _totalBytesDownloaded,
-                    SessionStart         = DateTime.UtcNow,
-                    TargetFolder         = targetFolder
+                    CompletedFiles = _completedFiles,
+                    TotalFiles = _totalFiles,
+                    TargetFolder = targetFolder,
+                    SessionStart = DateTime.UtcNow
                 };
                 File.WriteAllText(GetStateFilePath(), JsonSerializer.Serialize(st));
             }
             catch { }
-        }
-
-        private DownloadState? LoadState()
-        {
-            try
-            {
-                string path = GetStateFilePath();
-                if (!File.Exists(path)) return null;
-                var json = File.ReadAllText(path);
-                return JsonSerializer.Deserialize<DownloadState>(json);
-            }
-            catch { return null; }
         }
 
         private void DeleteState()
@@ -159,7 +123,7 @@ namespace klauncher
             if (State == LauncherState.Downloading)
             {
                 _isPaused = true;
-                _downloadCts?.Cancel();
+                _aria2Process?.CloseMainWindow(); // sends SIGINT to aria2 (graceful stop)
                 State = LauncherState.Paused;
                 StatusMessageChanged?.Invoke("Download paused.");
             }
@@ -172,14 +136,14 @@ namespace klauncher
                 _isPaused = false;
                 _cancelRequested = false;
                 StatusMessageChanged?.Invoke("Resuming download...");
-                Task.Run(() => RunDownloadAndInstallWorkflowAsync(targetFolder));
+                Task.Run(() => RunDownloadWorkflowAsync(targetFolder));
             }
         }
 
         public void Cancel()
         {
             _cancelRequested = true;
-            _downloadCts?.Cancel();
+            try { _aria2Process?.Kill(); } catch { }
             State = LauncherState.Idle;
             StatusMessageChanged?.Invoke("Operation cancelled.");
         }
@@ -189,27 +153,27 @@ namespace klauncher
             if (State == LauncherState.Downloading || State == LauncherState.Extracting)
                 return;
 
-            _isPaused        = false;
+            _isPaused = false;
             _cancelRequested = false;
 
-            var saved = LoadState();
-            if (saved != null && saved.CompletedParts > 0)
+            var saved = GetSavedState();
+            if (saved != null && !string.IsNullOrEmpty(saved.TargetFolder) && saved.CompletedFiles < saved.TotalFiles)
             {
-                _completedParts       = saved.CompletedParts;
-                _totalBytesDownloaded = saved.TotalBytesDownloaded;
-                StatusMessageChanged?.Invoke($"Resuming from part {_completedParts + 1}/{TotalParts}...");
+                _completedFiles = saved.CompletedFiles;
+                _totalFiles = saved.TotalFiles;
+                StatusMessageChanged?.Invoke($"Resuming download ({_completedFiles}/{_totalFiles} files)...");
             }
             else
             {
-                _completedParts       = 0;
-                _totalBytesDownloaded = 0;
+                _completedFiles = 0;
+                _totalFiles = 0;
             }
 
-            await RunDownloadAndInstallWorkflowAsync(targetFolder);
+            await RunDownloadWorkflowAsync(targetFolder);
         }
 
         // ── Core Workflow ────────────────────────────────────────────────────────
-        private async Task RunDownloadAndInstallWorkflowAsync(string targetFolder)
+        private async Task RunDownloadWorkflowAsync(string targetFolder)
         {
             State = LauncherState.Downloading;
 
@@ -218,405 +182,224 @@ namespace klauncher
                 if (!Directory.Exists(targetFolder))
                     Directory.CreateDirectory(targetFolder);
 
-                bool downloadSuccess = await DownloadAllPartsAsync(targetFolder);
-                if (!downloadSuccess)
+                // Check aria2 exists
+                if (!File.Exists(Aria2Path))
                 {
-                    if (_isPaused)        State = LauncherState.Paused;
-                    else if (_cancelRequested) State = LauncherState.Idle;
+                    State = LauncherState.Error;
+                    ErrorOccurred?.Invoke("aria2c.exe not found. Please reinstall KLAUNCHER.");
                     return;
                 }
 
+                // Generate aria2 input file
+                string inputFile = Path.Combine(BaseDir, "download_list.txt");
+                GenerateAria2InputFile(inputFile, targetFolder);
+
+                _totalFiles = CountFilesInInputFile(inputFile);
+                StatusMessageChanged?.Invoke($"Downloading {_totalFiles} files with aria2 (64 connections each)...");
+
+                // Run aria2
+                bool success = await RunAria2Async(inputFile, targetFolder);
+
                 if (_cancelRequested) return;
 
-                // Extract
-                State = LauncherState.Extracting;
-                StatusMessageChanged?.Invoke("Extracting files... This may take several minutes.");
-
-                bool extractSuccess = await ExtractAllPartsAsync(targetFolder);
-                if (extractSuccess)
+                if (success)
                 {
-                    // Download VMP.exe if not present
-                    await DownloadVmpAsync(targetFolder);
-
                     DeleteState();
-                    State = LauncherState.Completed;
-                    StatusMessageChanged?.Invoke("Installation completed successfully!");
+                    StatusMessageChanged?.Invoke("Download complete! Running setup...");
+
+                    // Run setup.exe
+                    string setupPath = Path.Combine(targetFolder, SetupExe);
+                    if (File.Exists(setupPath))
+                    {
+                        State = LauncherState.Extracting;
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = setupPath,
+                            WorkingDirectory = targetFolder,
+                            UseShellExecute = true
+                        });
+                        State = LauncherState.Completed;
+                        StatusMessageChanged?.Invoke("Setup launched successfully!");
+                    }
+                    else
+                    {
+                        State = LauncherState.Completed;
+                        StatusMessageChanged?.Invoke("Download completed. Run setup.exe manually.");
+                    }
+                }
+                else if (_isPaused)
+                {
+                    State = LauncherState.Paused;
                 }
                 else
                 {
                     State = LauncherState.Error;
-                    ErrorOccurred?.Invoke("Error extracting installation files.");
+                    ErrorOccurred?.Invoke("Download failed. Check your connection and try again.");
                 }
             }
             catch (Exception ex)
             {
                 State = LauncherState.Error;
-                ErrorOccurred?.Invoke($"General error: {ex.Message}");
+                ErrorOccurred?.Invoke($"Error: {ex.Message}");
             }
         }
 
-        // ── Parallel Download All Parts ──────────────────────────────────────────
-        private async Task<bool> DownloadAllPartsAsync(string targetFolder)
+        // ── Generate aria2 input file ────────────────────────────────────────────
+        private void GenerateAria2InputFile(string filePath, string targetFolder)
         {
-            // Collect parts that need downloading
-            var partsToDownload = new List<int>();
-            for (int partNum = 1; partNum <= TotalParts; partNum++)
+            // This generates the list of files to download
+            // Format: URL\n  dir=destination\n  out=filename\n\n
+            // The actual URLs will be set when the user provides hosting links
+            // For now, generate from a known file list
+
+            var lines = new List<string>();
+
+            // Scan the setup folder for all files
+            string setupSource = Path.Combine(targetFolder, "!Setup", "GTA V Legacy [SE7EN RePack]");
+            if (Directory.Exists(setupSource))
             {
-                if (_isPaused || _cancelRequested) return false;
-
-                string fileName  = string.Format("Grand.Theft.Auto.V.VMP.Edition.part{0:D2}.rar", partNum);
-                string finalPath = Path.Combine(targetFolder, fileName);
-
-                // Skip completed parts
-                if (partNum <= _completedParts || File.Exists(finalPath))
+                foreach (string file in Directory.GetFiles(setupSource, "*", SearchOption.AllDirectories))
                 {
-                    if (File.Exists(finalPath) && partNum > _completedParts)
-                    {
-                        lock (_lock)
-                        {
-                            _totalBytesDownloaded += new FileInfo(finalPath).Length;
-                            _completedParts++;
-                        }
-                    }
-                    double skipProg = ((double)Math.Max(partNum, _completedParts) / TotalParts) * 100;
-                    TotalDownloadProgressChanged?.Invoke(skipProg);
-                    continue;
-                }
+                    string relativePath = file[(setupSource.Length + 1)..];
+                    string url = $"{BaseUrl}/{relativePath.Replace('\\', '/')}";
+                    string destDir = Path.GetDirectoryName(file) ?? targetFolder;
 
-                partsToDownload.Add(partNum);
+                    lines.Add(url);
+                    lines.Add($"  dir={destDir}");
+                    lines.Add($"  out={Path.GetFileName(file)}");
+                    lines.Add("");
+                }
             }
 
-            if (partsToDownload.Count == 0) return true;
-
-            StatusMessageChanged?.Invoke($"Downloading {partsToDownload.Count} parts ({ParallelDownloads} at a time)...");
-
-            // Download in parallel batches
-            int nextPartIndex = 0;
-            int activeDownloads = 0;
-            bool anyFailed = false;
-            var semaphore = new SemaphoreSlim(ParallelDownloads);
-            var allTasks = new List<Task>();
-
-            while (nextPartIndex < partsToDownload.Count && !_isPaused && !_cancelRequested)
-            {
-                await semaphore.WaitAsync();
-
-                if (_isPaused || _cancelRequested || anyFailed)
-                {
-                    semaphore.Release();
-                    break;
-                }
-
-                int partNum = partsToDownload[nextPartIndex];
-                nextPartIndex++;
-                activeDownloads++;
-
-                string fileName  = string.Format("Grand.Theft.Auto.V.VMP.Edition.part{0:D2}.rar", partNum);
-                string url       = string.Format(UrlTemplate, partNum);
-                string finalPath = Path.Combine(targetFolder, fileName);
-                string tempPath  = finalPath + ".tmp";
-
-                StatusMessageChanged?.Invoke($"Downloading part {partNum}/{TotalParts}...");
-                PartDownloadStarted?.Invoke(partNum, TotalParts);
-
-                int capturedPart = partNum;
-                var task = Task.Run(async () =>
-                {
-                    try
-                    {
-                        bool success = await DownloadFileWithResumeAsync(url, tempPath, _downloadCts?.Token ?? CancellationToken.None, capturedPart);
-
-                        if (success && File.Exists(tempPath))
-                        {
-                            File.Move(tempPath, finalPath, overwrite: true);
-                            long fileSize = new FileInfo(finalPath).Length;
-
-                            lock (_lock)
-                            {
-                                _completedParts++;
-                                _totalBytesDownloaded += fileSize;
-                            }
-
-                            double totalProgress = ((double)_completedParts / TotalParts) * 100;
-                            TotalDownloadProgressChanged?.Invoke(totalProgress);
-                            SaveState(targetFolder);
-
-                            StatusMessageChanged?.Invoke($"Part {capturedPart}/{TotalParts} completed. ({_completedParts}/{TotalParts} total)");
-                        }
-                        else if (!success)
-                        {
-                            anyFailed = true;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        ErrorOccurred?.Invoke($"Error on part {capturedPart}: {ex.Message}");
-                        anyFailed = true;
-                    }
-                    finally
-                    {
-                        semaphore.Release();
-                        Interlocked.Decrement(ref activeDownloads);
-                    }
-                });
-
-                allTasks.Add(task);
-
-                // Small delay between dispatching to avoid hammering the server
-                await Task.Delay(100);
-            }
-
-            // Wait for all active downloads to complete
-            await Task.WhenAll(allTasks);
-
-            return !anyFailed && !_isPaused && !_cancelRequested;
+            File.WriteAllLines(filePath, lines);
         }
 
-        // ── Single File Download with Resume & Retry ─────────────────────────────
-        private async Task<bool> DownloadFileWithResumeAsync(string url, string tempPath, CancellationToken token, int partNum = 0)
+        private int CountFilesInInputFile(string filePath)
         {
-            for (int attempt = 1; attempt <= MaxRetries; attempt++)
-            {
-                if (_isPaused || _cancelRequested) return false;
-
-                long existingLength = 0;
-                if (File.Exists(tempPath))
-                    existingLength = new FileInfo(tempPath).Length;
-
-                try
-                {
-                    var request = new HttpRequestMessage(HttpMethod.Get, url);
-                    if (existingLength > 0)
-                        request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(existingLength, null);
-
-                    HttpResponseMessage response = await _httpClient.SendAsync(
-                        request, HttpCompletionOption.ResponseHeadersRead, token);
-
-                    bool appendMode = existingLength > 0 && response.StatusCode == System.Net.HttpStatusCode.PartialContent;
-                    if (!appendMode && existingLength > 0)
-                    {
-                        existingLength = 0;
-                        if (File.Exists(tempPath)) File.Delete(tempPath);
-                    }
-
-                    long? contentLength = response.Content.Headers.ContentLength;
-                    long totalBytes     = (contentLength ?? 0) + existingLength;
-
-                    using var responseStream = await response.Content.ReadAsStreamAsync(token);
-                    using var fileStream     = new FileStream(
-                        tempPath,
-                        appendMode ? FileMode.Append : FileMode.Create,
-                        FileAccess.Write, FileShare.None, BufferSize, true);
-
-                    if (!appendMode && contentLength.HasValue)
-                    {
-                        fileStream.SetLength(contentLength.Value);
-                    }
-
-                    byte[] buffer             = new byte[BufferSize];
-                    int    bytesRead;
-                    long   currentBytesDownloaded = existingLength;
-
-                    var    stopwatch      = Stopwatch.StartNew();
-                    long   lastBytesRead  = 0;
-
-                    while ((bytesRead = await responseStream.ReadAsync(buffer, 0, buffer.Length, token)) > 0)
-                    {
-                        if (token.IsCancellationRequested || _isPaused || _cancelRequested)
-                            return false;
-
-                        await fileStream.WriteAsync(buffer, 0, bytesRead, token);
-                        currentBytesDownloaded += bytesRead;
-
-                        // Track per-part bytes for combined speed
-                        _partBytesDownloaded[partNum] = currentBytesDownloaded;
-
-                        // Update speed & ETA every ~500 ms
-                        if (stopwatch.ElapsedMilliseconds >= 500)
-                        {
-                            // Calculate combined speed across all active parallel downloads
-                            long totalBytesThisTick = 0;
-                            for (int i = 1; i <= TotalParts; i++)
-                                totalBytesThisTick += _partBytesDownloaded[i];
-
-                            double seconds      = stopwatch.Elapsed.TotalSeconds;
-                            long   bytesDelta   = totalBytesThisTick - lastBytesRead;
-                            double instantSpeed = bytesDelta / seconds;
-
-                            _sessionSpeedEMA = (_sessionSpeedEMA == 0)
-                                ? instantSpeed
-                                : _sessionSpeedEMA * (1 - SpeedAlpha) + instantSpeed * SpeedAlpha;
-
-                            _downloadSpeed = _sessionSpeedEMA;
-                            lastBytesRead = totalBytesThisTick;
-                            stopwatch.Restart();
-
-                            // ETA
-                            long remainingBytes = EstimatedTotalBytes - _totalBytesDownloaded - (currentBytesDownloaded - existingLength);
-                            if (remainingBytes < 0) remainingBytes = 0;
-                            TimeSpan eta = (_downloadSpeed > 0)
-                                ? TimeSpan.FromSeconds(remainingBytes / _downloadSpeed)
-                                : TimeSpan.MaxValue;
-                            EstimatedTimeRemainingChanged?.Invoke(eta);
-
-                            // Per-file progress
-                            double percentage  = (totalBytes > 0) ? ((double)currentBytesDownloaded / totalBytes) * 100.0 : 0;
-                            string speedString = FormatSpeed(_downloadSpeed);
-                            DownloadProgressChanged?.Invoke(percentage, speedString);
-                        }
-                    }
-
-                    DownloadProgressChanged?.Invoke(100.0, "0.0 KB/s");
-                    return true;
-                }
-                catch (OperationCanceledException)
-                {
-                    return false;
-                }
-                catch (Exception ex)
-                {
-                    if (attempt < MaxRetries)
-                    {
-                        StatusMessageChanged?.Invoke($"Retry {attempt}/{MaxRetries} for part {partNum}...");
-                        await Task.Delay(RetryDelayMs, token);
-                        continue;
-                    }
-                    ErrorOccurred?.Invoke($"Network error after {MaxRetries} retries on part {partNum}: {ex.Message}");
-                    return false;
-                }
-            }
-            return false;
+            if (!File.Exists(filePath)) return 0;
+            return File.ReadAllLines(filePath).Count(l => l.StartsWith("http"));
         }
 
-        // ── Extraction ───────────────────────────────────────────────────────────
-        private async Task<bool> ExtractAllPartsAsync(string targetFolder)
+        // ── Run aria2 ───────────────────────────────────────────────────────────
+        private async Task<bool> RunAria2Async(string inputFile, string targetFolder)
         {
-            string firstPartPath = Path.Combine(targetFolder, "Grand.Theft.Auto.V.VMP.Edition.part01.rar");
-
-            if (!File.Exists(firstPartPath))
+            var args = new List<string>
             {
-                ErrorOccurred?.Invoke("Part 1 file not found for extraction.");
-                return false;
-            }
+                $"--input-file=\"{inputFile}\"",
+                $"--conf-path=\"{Aria2Conf}\"",
+                "--enable-color=false",
+                "--summary-interval=1",
+                "--console-log-level=notice",
+                "--allow-overwrite=true",
+                "--auto-file-renaming=false",
+                "--continue=true",
+                "--daemon=false",
+                "--file-allocation=none"
+            };
 
-            try
+            var startInfo = new ProcessStartInfo
             {
-                return await Task.Run(() =>
-                {
-                    using (var archive = ArchiveFactory.OpenArchive(firstPartPath))
-                    {
-                        long totalSizeToExtract = 0;
-                        long totalBytesExtracted = 0;
-                        foreach (var entry in archive.Entries)
-                            if (!entry.IsDirectory) totalSizeToExtract += entry.Size;
+                FileName = Aria2Path,
+                Arguments = string.Join(" ", args),
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                RedirectStandardInput = true,
+                CreateNoWindow = true,
+                WorkingDirectory = targetFolder
+            };
 
-                        if (totalSizeToExtract == 0) totalSizeToExtract = 1;
+            _aria2Process = new Process { StartInfo = startInfo };
+            _aria2Process.Start();
 
-                        foreach (var entry in archive.Entries)
-                        {
-                            if (_cancelRequested) return false;
-                            if (entry.IsDirectory) continue;
+            // Read output asynchronously
+            var outputTask = ReadAria2OutputAsync(_aria2Process.StandardOutput);
+            var errorTask = ReadAria2OutputAsync(_aria2Process.StandardError);
 
-                            string entryKey = entry.Key ?? "file";
-                            ExtractionProgressChanged?.Invoke(entryKey, ((double)totalBytesExtracted / totalSizeToExtract) * 100);
+            // Wait for process to exit
+            await _aria2Process.WaitForExitAsync();
 
-                            string  destPath  = Path.Combine(targetFolder, entryKey);
-                            string? directory = Path.GetDirectoryName(destPath);
-                            if (directory != null && !Directory.Exists(directory))
-                                Directory.CreateDirectory(directory);
+            // Process any remaining output
+            await outputTask;
+            await errorTask;
 
-                            using var entryStream = entry.OpenEntryStream();
-                            using var fileStream  = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, 262144, true);
+            return _aria2Process.ExitCode == 0;
+        }
 
-                            if (entry.Size > 0)
-                                fileStream.SetLength(entry.Size);
-
-                            byte[] buffer = new byte[262144];
-                            int read;
-                            long entryBytesWritten = 0;
-                            var progressStopwatch  = Stopwatch.StartNew();
-
-                            while ((read = entryStream.Read(buffer, 0, buffer.Length)) > 0)
-                            {
-                                if (_cancelRequested) return false;
-                                fileStream.Write(buffer, 0, read);
-                                totalBytesExtracted += read;
-                                entryBytesWritten   += read;
-
-                                if (progressStopwatch.ElapsedMilliseconds > 100)
-                                {
-                                    double pct = ((double)totalBytesExtracted / totalSizeToExtract) * 100;
-                                    ExtractionProgressChanged?.Invoke(
-                                        $"{entryKey} ({FormatBytes(entryBytesWritten)} / {FormatBytes(entry.Size)})", pct);
-                                    progressStopwatch.Restart();
-                                }
-                            }
-                        }
-                    }
-
-                    // Clean up RAR files
-                    try
-                    {
-                        for (int i = 1; i <= TotalParts; i++)
-                        {
-                            string rarPath = Path.Combine(targetFolder,
-                                string.Format("Grand.Theft.Auto.V.VMP.Edition.part{0:D2}.rar", i));
-                            if (File.Exists(rarPath)) File.Delete(rarPath);
-                        }
-                    }
-                    catch { }
-
-                    return true;
-                });
-            }
-            catch (Exception ex)
+        private async Task ReadAria2OutputAsync(StreamReader reader)
+        {
+            while (!reader.EndOfStream)
             {
-                ErrorOccurred?.Invoke($"Extraction error: {ex.Message}");
-                return false;
+                string? line = await reader.ReadLineAsync();
+                if (string.IsNullOrEmpty(line)) continue;
+
+                ParseAria2Line(line);
             }
         }
 
-        // ── VMP Installer ────────────────────────────────────────────────────────
-        private async Task DownloadVmpAsync(string targetFolder)
+        // ── Parse aria2 output ───────────────────────────────────────────────────
+        private readonly Regex _progressRegex = new(@"\[#\w+\s+([\d.]+[GMKB]+)/([\d.]+[GMKB])\s*\(([\d]+)%\)\s+([\d.]+[GMKB]/s)\s+ETA:([\w:]+)\]");
+        private readonly Regex _summaryRegex = new(@"DOWNLOAD:(\d+)/(\d+)\s+([\d.]+[GMKB])/s\s+ETA:([\w:]+)");
+        private readonly Regex _speedRegex = new(@"([\d.]+)[GMKB]/s");
+
+        private void ParseAria2Line(string line)
         {
-            string vmpPath = Path.Combine(targetFolder, "VMP.exe");
-            if (File.Exists(vmpPath))
+            // Skip info lines
+            if (line.Contains("ANALYZE") || line.Contains("Verifying") || line.Contains("OK")) return;
+
+            // Parse progress line: [#abc123 1.2GiB/2.4GiB(50%) 1.5MiB/s ETA:12:34]
+            var match = _progressRegex.Match(line);
+            if (match.Success)
             {
-                StatusMessageChanged?.Invoke("VMP.exe already installed.");
+                string current = match.Groups[1].Value;
+                string total = match.Groups[2].Value;
+                int percent = int.Parse(match.Groups[3].Value);
+                string speed = match.Groups[4].Value;
+                string eta = match.Groups[5].Value;
+
+                DownloadProgressChanged?.Invoke(percent, $"{speed} - ETA: {eta}");
                 return;
             }
 
-            string vmpUrl = "https://cdn.vmp.ir/VMP.exe?v=1";
-            StatusMessageChanged?.Invoke("Downloading VMP.exe...");
-
-            for (int attempt = 1; attempt <= MaxRetries; attempt++)
+            // Parse summary line: DOWNLOAD:5/29 1.5MiB/s ETA:12:34
+            var summaryMatch = _summaryRegex.Match(line);
+            if (summaryMatch.Success)
             {
-                if (_cancelRequested) return;
-                string tempPath = vmpPath + ".tmp";
-                try
-                {
-                    using var response = await _httpClient.GetAsync(vmpUrl, HttpCompletionOption.ResponseHeadersRead);
-                    response.EnsureSuccessStatusCode();
-                    using var stream = await response.Content.ReadAsStreamAsync();
-                    using var fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, BufferSize);
-                    await stream.CopyToAsync(fs);
-                    File.Move(tempPath, vmpPath, overwrite: true);
-                    StatusMessageChanged?.Invoke("VMP.exe installed successfully.");
-                    return;
-                }
-                catch (Exception ex)
-                {
-                    if (attempt < MaxRetries)
-                    {
-                        StatusMessageChanged?.Invoke($"VMP download retry {attempt}/{MaxRetries}...");
-                        await Task.Delay(RetryDelayMs);
-                    }
-                    else
-                    {
-                        ErrorOccurred?.Invoke($"Failed to download VMP.exe after {MaxRetries} retries: {ex.Message}");
-                    }
-                }
+                int current = int.Parse(summaryMatch.Groups[1].Value);
+                int total = int.Parse(summaryMatch.Groups[2].Value);
+                string speed = summaryMatch.Groups[3].Value;
+                string eta = summaryMatch.Groups[4].Value;
+
+                _completedFiles = current;
+                _totalFiles = total;
+
+                double totalProgress = ((double)current / total) * 100;
+                TotalDownloadProgressChanged?.Invoke(totalProgress);
+                StatusMessageChanged?.Invoke($"File {current}/{total} - {speed} - ETA: {eta}");
+                PartDownloadStarted?.Invoke(current, total);
+                return;
             }
+
+            // Parse simple speed line
+            var speedMatch = _speedRegex.Match(line);
+            if (speedMatch.Success && State == LauncherState.Downloading)
+            {
+                DownloadProgressChanged?.Invoke(0, $"{speedMatch.Groups[1].Value}{GetSpeedUnit(line)}");
+            }
+        }
+
+        private string GetSpeedUnit(string line)
+        {
+            if (line.Contains("MiB/s")) return " MiB/s";
+            if (line.Contains("GiB/s")) return " GiB/s";
+            if (line.Contains("KiB/s")) return " KiB/s";
+            return " B/s";
+        }
+
+        public void Dispose()
+        {
+            try { _aria2Process?.Kill(); } catch { }
+            _aria2Process?.Dispose();
         }
 
         // ── Dependency Installers ────────────────────────────────────────────────
@@ -627,22 +410,22 @@ namespace klauncher
             if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
 
             string dxSetupPath = Path.Combine(tempDir, "dxwebsetup.exe");
-            string dxUrl       = "https://download.microsoft.com/download/1/7/1/1718CCC3-7CDD-41F4-890B-4090575B8356/dxwebsetup.exe";
+            string dxUrl = "https://download.microsoft.com/download/1/7/1/1718CCC3-7CDD-41F4-890B-4090575B8356/dxwebsetup.exe";
 
             try
             {
-                using (var resp = await _httpClient.GetAsync(dxUrl))
-                using (var fs   = new FileStream(dxSetupPath, FileMode.Create, FileAccess.Write))
-                    await resp.Content.CopyToAsync(fs);
+                using var response = await HttpClient.GetAsync(dxUrl);
+                response.EnsureSuccessStatusCode();
+                using var fs = new FileStream(dxSetupPath, FileMode.Create, FileAccess.Write);
+                await response.Content.CopyToAsync(fs);
 
                 StatusMessageChanged?.Invoke("Running DirectX installer...");
                 var process = Process.Start(new ProcessStartInfo
                 {
-                    FileName       = dxSetupPath,
-                    Arguments      = "/silent",
+                    FileName = dxSetupPath,
+                    Arguments = "/silent",
                     UseShellExecute = true
                 });
-
                 if (process != null)
                 {
                     await process.WaitForExitAsync();
@@ -664,22 +447,22 @@ namespace klauncher
             if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
 
             string vcRedistPath = Path.Combine(tempDir, "vc_redist.x64.exe");
-            string vcUrl        = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
+            string vcUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
 
             try
             {
-                using (var resp = await _httpClient.GetAsync(vcUrl))
-                using (var fs   = new FileStream(vcRedistPath, FileMode.Create, FileAccess.Write))
-                    await resp.Content.CopyToAsync(fs);
+                using var response = await HttpClient.GetAsync(vcUrl);
+                response.EnsureSuccessStatusCode();
+                using var fs = new FileStream(vcRedistPath, FileMode.Create, FileAccess.Write);
+                await response.Content.CopyToAsync(fs);
 
                 StatusMessageChanged?.Invoke("Running Visual C++ installer...");
                 var process = Process.Start(new ProcessStartInfo
                 {
-                    FileName        = vcRedistPath,
-                    Arguments       = "/passive /norestart",
+                    FileName = vcRedistPath,
+                    Arguments = "/passive /norestart",
                     UseShellExecute = true
                 });
-
                 if (process != null)
                 {
                     await process.WaitForExitAsync();
@@ -694,22 +477,6 @@ namespace klauncher
             return false;
         }
 
-        // ── Formatters ───────────────────────────────────────────────────────────
-        private static string FormatSpeed(double bytesPerSecond)
-        {
-            if (bytesPerSecond >= 1024 * 1024)
-                return $"{bytesPerSecond / (1024 * 1024):F1} MB/s";
-            if (bytesPerSecond >= 1024)
-                return $"{bytesPerSecond / 1024:F1} KB/s";
-            return $"{bytesPerSecond:F0} B/s";
-        }
-
-        private static string FormatBytes(long bytes)
-        {
-            if (bytes >= 1024L * 1024 * 1024) return $"{bytes / (1024.0 * 1024 * 1024):F2} GB";
-            if (bytes >= 1024L * 1024)        return $"{bytes / (1024.0 * 1024):F2} MB";
-            if (bytes >= 1024L)               return $"{bytes / 1024.0:F2} KB";
-            return $"{bytes} B";
-        }
+        private static readonly HttpClient HttpClient = new();
     }
 }

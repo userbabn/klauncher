@@ -52,10 +52,10 @@ namespace klauncher
             }
 
             var saved = _launcherService.GetSavedState();
-            if (saved != null && !string.IsNullOrEmpty(saved.TargetFolder) && saved.CompletedParts < 29)
+            if (saved != null && !string.IsNullOrEmpty(saved.TargetFolder) && saved.CompletedFiles < saved.TotalFiles)
             {
                 DownloadStatusBar.Visibility = Visibility.Visible;
-                StatusText.Text = $"Resuming download (part {saved.CompletedParts + 1}/29)...";
+                StatusText.Text = $"Resuming download ({saved.CompletedFiles + 1}/{saved.TotalFiles})...";
                 StatusDot.Fill = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString("#00bcd4");
 
                 ShowInstallScreen();

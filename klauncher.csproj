@@ -14,6 +14,8 @@
     <PackageReference Include="SharpCompress" Version="0.50.0" />
     <Resource Include="koala_logo.png" />
     <None Include="koala_logo.ico" />
+    <None Include="aria2c.exe" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="aria2.conf" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
