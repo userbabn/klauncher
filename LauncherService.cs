@@ -207,28 +207,23 @@ namespace klauncher
 
                 if (_cancelRequested) return;
 
-                if (success)
+                // Verify actual files were downloaded
+                bool hasFiles = false;
+                try
+                {
+                    var files = Directory.GetFiles(targetFolder, "*.*", SearchOption.AllDirectories);
+                    hasFiles = files.Length > 5;
+                }
+                catch { }
+
+                if (success && hasFiles)
                 {
                     DeleteState();
-                    StatusMessageChanged?.Invoke("Download complete! Running setup...");
-
-                    string setupPath = Path.Combine(targetFolder, "!Setup", "GTA V Legacy [SE7EN RePack]", "setup.exe");
-                    if (!File.Exists(setupPath))
-                        setupPath = Path.Combine(targetFolder, "setup.exe");
-
-                    if (File.Exists(setupPath))
-                    {
-                        State = LauncherState.Extracting;
-                        Process.Start(new ProcessStartInfo
-                        {
-                            FileName = setupPath,
-                            WorkingDirectory = Path.GetDirectoryName(setupPath) ?? targetFolder,
-                            UseShellExecute = true
-                        });
-                        StatusMessageChanged?.Invoke("Setup launched successfully!");
-                    }
-
+                    int fileCount = 0;
+                    try { fileCount = Directory.GetFiles(targetFolder, "*.*", SearchOption.AllDirectories).Length; } catch { }
                     State = LauncherState.Completed;
+                    StatusMessageChanged?.Invoke($"Download complete! {fileCount} files saved to: {targetFolder}");
+                    ErrorOccurred?.Invoke($"DONE: Download complete — {fileCount} files in:\n{targetFolder}\n\nNow install VMP manually from the setup files.\n\n---\n\nدانلود کامل شد — {fileCount} فایل در:\n{targetFolder}\n\nاکنون VMP را به صورت دستی نصب کنید.");
                 }
                 else if (_isPaused)
                 {
@@ -238,7 +233,10 @@ namespace klauncher
                 else
                 {
                     State = LauncherState.Error;
-                    ErrorOccurred?.Invoke("Download failed. Check your connection and try again.");
+                    if (!hasFiles)
+                        ErrorOccurred?.Invoke("Download failed — no files were received. Check your internet connection and try again.\n\nدانلود ناموفق بود — هیچ فایلی دریافت نشد. اتصال اینترنت خود را بررسی کنید.");
+                    else
+                        ErrorOccurred?.Invoke("Download failed. Check your connection and try again.");
                 }
             }
             catch (Exception ex)
@@ -280,9 +278,8 @@ namespace klauncher
         {
             var args = new List<string>
             {
-                "--follow-torrent=true",
                 $"--dir=\"{targetFolder}\"",
-                $"--input-file=\"{torrentPath}\"",
+                "--follow-torrent=true",
                 "--enable-color=false",
                 "--summary-interval=1",
                 "--console-log-level=notice",
@@ -291,13 +288,15 @@ namespace klauncher
                 "--continue=true",
                 "--daemon=false",
                 "--file-allocation=none",
-                "--bt-stop-timeout=0",
+                "--bt-stop-timeout=600",
                 "--seed-time=0",
                 "--bt-remove-unselected-file=true",
-                "--bt-tracker=tracker.7n.re/announce,tracker.se7en.ws/announce,tracker.7launcher.com/announce,tracker.7launcher.ru/announce",
                 "--bt-enable-lpd=true",
                 "--bt-max-peers=512",
-                "--bt-request-peer-speed-limit=10M"
+                "--enable-dht=true",
+                "--dht-listen-port=6881",
+                "--bt-listen-port=6881-6889",
+                $"\"{torrentPath}\""
             };
 
             if (File.Exists(Aria2Conf))
@@ -412,6 +411,31 @@ namespace klauncher
             if (value.Contains("MiB")) return (long)(d * 1024 * 1024);
             if (value.Contains("KiB")) return (long)(d * 1024);
             return (long)d;
+        }
+
+        private static string FindSetupExe(string targetFolder)
+        {
+            string[] searchPaths = new[]
+            {
+                Path.Combine(targetFolder, "!Setup", "GTA V Legacy [SE7EN RePack]", "setup.exe"),
+                Path.Combine(targetFolder, "GTA V Legacy [SE7EN RePack]", "setup.exe"),
+                Path.Combine(targetFolder, "setup.exe"),
+                Path.Combine(targetFolder, "Setup.exe"),
+                Path.Combine(targetFolder, "Setup", "setup.exe"),
+                Path.Combine(targetFolder, "!Setup", "setup.exe"),
+            };
+            foreach (string p in searchPaths)
+                if (File.Exists(p)) return p;
+
+            // Deep search
+            try
+            {
+                var found = Directory.GetFiles(targetFolder, "setup.exe", SearchOption.AllDirectories);
+                if (found.Length > 0) return found[0];
+            }
+            catch { }
+
+            return Path.Combine(targetFolder, "setup.exe");
         }
 
         public void Dispose()
