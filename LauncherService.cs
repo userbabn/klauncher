@@ -25,6 +25,7 @@ namespace klauncher
         public int CompletedFiles { get; set; } = 0;
         public int TotalFiles { get; set; } = 0;
         public string TargetFolder { get; set; } = string.Empty;
+        public string TorrentName { get; set; } = string.Empty;
         public DateTime SessionStart { get; set; } = DateTime.UtcNow;
     }
 
@@ -34,34 +35,33 @@ namespace klauncher
         private static readonly string BaseDir = AppDomain.CurrentDomain.BaseDirectory;
         private static readonly string Aria2Path = Path.Combine(BaseDir, "aria2c.exe");
         private static readonly string Aria2Conf = Path.Combine(BaseDir, "aria2.conf");
+        private static readonly string TorrentDir = Path.Combine(BaseDir, "torrents");
         private const string StateFileName = "download_state.json";
 
         // ── Config ───────────────────────────────────────────────────────────────
-        private const string BaseUrl = "https://cdn.vmp.ir/game/1/GTA_V_VMP_Setup";
+        private const string TorrentUrl = "https://se7en.ws/torrents/gta-v_legacy.torrent";
         private const string SetupExe = "setup.exe";
 
         // ── State ────────────────────────────────────────────────────────────────
-        private LauncherState _state = LauncherState.Idle;
         private bool _isPaused = false;
         private bool _cancelRequested = false;
         private Process? _aria2Process;
-        private CancellationTokenSource? _cts;
 
         // Progress
         private int _completedFiles = 0;
         private int _totalFiles = 0;
-        private long _totalBytesDownloaded = 0;
-        private double _downloadSpeed = 0;
+        private long _totalDownloaded = 0;
+        private long _totalSize = 0;
 
         // ── Events ───────────────────────────────────────────────────────────────
         public event Action<LauncherState>? StateChanged;
-        public event Action<double, string>? DownloadProgressChanged;    // (%, speed)
+        public event Action<double, string>? DownloadProgressChanged;
         public event Action<double>? TotalDownloadProgressChanged;
         public event Action<int, int>? PartDownloadStarted;
-        public event Action<string, double>? ExtractionProgressChanged;
         public event Action<string>? StatusMessageChanged;
         public event Action<string>? ErrorOccurred;
         public event Action<TimeSpan>? EstimatedTimeRemainingChanged;
+        public event Action<string, double>? ExtractionProgressChanged;
 
         public LauncherState State
         {
@@ -75,6 +75,7 @@ namespace klauncher
                 }
             }
         }
+        private LauncherState _state = LauncherState.Idle;
 
         // ── State persistence ────────────────────────────────────────────────────
         private static string GetStateFilePath() =>
@@ -100,6 +101,7 @@ namespace klauncher
                     CompletedFiles = _completedFiles,
                     TotalFiles = _totalFiles,
                     TargetFolder = targetFolder,
+                    TorrentName = "GTA V Legacy [SE7EN RePack]",
                     SessionStart = DateTime.UtcNow
                 };
                 File.WriteAllText(GetStateFilePath(), JsonSerializer.Serialize(st));
@@ -123,7 +125,7 @@ namespace klauncher
             if (State == LauncherState.Downloading)
             {
                 _isPaused = true;
-                _aria2Process?.CloseMainWindow(); // sends SIGINT to aria2 (graceful stop)
+                _aria2Process?.CloseMainWindow();
                 State = LauncherState.Paused;
                 StatusMessageChanged?.Invoke("Download paused.");
             }
@@ -182,7 +184,9 @@ namespace klauncher
                 if (!Directory.Exists(targetFolder))
                     Directory.CreateDirectory(targetFolder);
 
-                // Check aria2 exists
+                if (!Directory.Exists(TorrentDir))
+                    Directory.CreateDirectory(TorrentDir);
+
                 if (!File.Exists(Aria2Path))
                 {
                     State = LauncherState.Error;
@@ -190,15 +194,18 @@ namespace klauncher
                     return;
                 }
 
-                // Generate aria2 input file
-                string inputFile = Path.Combine(BaseDir, "download_list.txt");
-                GenerateAria2InputFile(inputFile, targetFolder);
+                string torrentPath = await EnsureTorrentFileAsync();
+                if (string.IsNullOrEmpty(torrentPath))
+                {
+                    State = LauncherState.Error;
+                    ErrorOccurred?.Invoke("Failed to download .torrent file. Check your internet connection.");
+                    return;
+                }
 
-                _totalFiles = CountFilesInInputFile(inputFile);
-                StatusMessageChanged?.Invoke($"Downloading {_totalFiles} files with aria2 (64 connections each)...");
+                if (_cancelRequested) return;
 
-                // Run aria2
-                bool success = await RunAria2Async(inputFile, targetFolder);
+                StatusMessageChanged?.Invoke("Starting torrent download...");
+                bool success = await RunAria2TorrentAsync(torrentPath, targetFolder);
 
                 if (_cancelRequested) return;
 
@@ -207,15 +214,17 @@ namespace klauncher
                     DeleteState();
                     StatusMessageChanged?.Invoke("Download complete! Running setup...");
 
-                    // Run setup.exe
-                    string setupPath = Path.Combine(targetFolder, SetupExe);
+                    string setupPath = Path.Combine(targetFolder, "!Setup", "GTA V Legacy [SE7EN RePack]", SetupExe);
+                    if (!File.Exists(setupPath))
+                        setupPath = Path.Combine(targetFolder, SetupExe);
+
                     if (File.Exists(setupPath))
                     {
                         State = LauncherState.Extracting;
                         Process.Start(new ProcessStartInfo
                         {
                             FileName = setupPath,
-                            WorkingDirectory = targetFolder,
+                            WorkingDirectory = Path.GetDirectoryName(setupPath) ?? targetFolder,
                             UseShellExecute = true
                         });
                         State = LauncherState.Completed;
@@ -229,6 +238,7 @@ namespace klauncher
                 }
                 else if (_isPaused)
                 {
+                    SaveState(targetFolder);
                     State = LauncherState.Paused;
                 }
                 else
@@ -244,49 +254,39 @@ namespace klauncher
             }
         }
 
-        // ── Generate aria2 input file ────────────────────────────────────────────
-        private void GenerateAria2InputFile(string filePath, string targetFolder)
+        // ── Download .torrent file ──────────────────────────────────────────────
+        private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(30) };
+
+        private async Task<string> EnsureTorrentFileAsync()
         {
-            // This generates the list of files to download
-            // Format: URL\n  dir=destination\n  out=filename\n\n
-            // The actual URLs will be set when the user provides hosting links
-            // For now, generate from a known file list
+            string localPath = Path.Combine(TorrentDir, "gta-v_legacy.torrent");
 
-            var lines = new List<string>();
+            if (File.Exists(localPath) && new FileInfo(localPath).Length > 1000)
+                return localPath;
 
-            // Scan the setup folder for all files
-            string setupSource = Path.Combine(targetFolder, "!Setup", "GTA V Legacy [SE7EN RePack]");
-            if (Directory.Exists(setupSource))
+            StatusMessageChanged?.Invoke("Downloading .torrent file...");
+            try
             {
-                foreach (string file in Directory.GetFiles(setupSource, "*", SearchOption.AllDirectories))
-                {
-                    string relativePath = file[(setupSource.Length + 1)..];
-                    string url = $"{BaseUrl}/{relativePath.Replace('\\', '/')}";
-                    string destDir = Path.GetDirectoryName(file) ?? targetFolder;
-
-                    lines.Add(url);
-                    lines.Add($"  dir={destDir}");
-                    lines.Add($"  out={Path.GetFileName(file)}");
-                    lines.Add("");
-                }
+                using var response = await _http.GetAsync(TorrentUrl);
+                response.EnsureSuccessStatusCode();
+                using var fs = new FileStream(localPath, FileMode.Create, FileAccess.Write);
+                await response.Content.CopyToAsync(fs);
+                return localPath;
             }
-
-            File.WriteAllLines(filePath, lines);
+            catch
+            {
+                return File.Exists(localPath) ? localPath : string.Empty;
+            }
         }
 
-        private int CountFilesInInputFile(string filePath)
-        {
-            if (!File.Exists(filePath)) return 0;
-            return File.ReadAllLines(filePath).Count(l => l.StartsWith("http"));
-        }
-
-        // ── Run aria2 ───────────────────────────────────────────────────────────
-        private async Task<bool> RunAria2Async(string inputFile, string targetFolder)
+        // ── Run aria2 in torrent mode ───────────────────────────────────────────
+        private async Task<bool> RunAria2TorrentAsync(string torrentPath, string targetFolder)
         {
             var args = new List<string>
             {
-                $"--input-file=\"{inputFile}\"",
-                $"--conf-path=\"{Aria2Conf}\"",
+                $"--follow-torrent=true",
+                $"--dir=\"{targetFolder}\"",
+                $"--input-file=\"{torrentPath}\"",
                 "--enable-color=false",
                 "--summary-interval=1",
                 "--console-log-level=notice",
@@ -294,8 +294,19 @@ namespace klauncher
                 "--auto-file-renaming=false",
                 "--continue=true",
                 "--daemon=false",
-                "--file-allocation=none"
+                "--file-allocation=none",
+                "--bt-stop-timeout=0",
+                "--seed-time=0",
+                "--bt-remove-unselected-file=true",
+                "--max-overall-upload-limit=0",
+                "--bt-tracker=tracker.7n.re/announce,tracker.se7en.ws/announce,tracker.7launcher.com/announce,tracker.7launcher.ru/announce",
+                "--bt-enable-lpd=true",
+                "--bt-max-peers=512",
+                "--bt-request-peer-speed-limit=10M"
             };
+
+            if (File.Exists(Aria2Conf))
+                args.Add($"--conf-path=\"{Aria2Conf}\"");
 
             var startInfo = new ProcessStartInfo
             {
@@ -312,14 +323,11 @@ namespace klauncher
             _aria2Process = new Process { StartInfo = startInfo };
             _aria2Process.Start();
 
-            // Read output asynchronously
             var outputTask = ReadAria2OutputAsync(_aria2Process.StandardOutput);
             var errorTask = ReadAria2OutputAsync(_aria2Process.StandardError);
 
-            // Wait for process to exit
             await _aria2Process.WaitForExitAsync();
 
-            // Process any remaining output
             await outputTask;
             await errorTask;
 
@@ -332,68 +340,122 @@ namespace klauncher
             {
                 string? line = await reader.ReadLineAsync();
                 if (string.IsNullOrEmpty(line)) continue;
-
                 ParseAria2Line(line);
             }
         }
 
-        // ── Parse aria2 output ───────────────────────────────────────────────────
-        private readonly Regex _progressRegex = new(@"\[#\w+\s+([\d.]+[GMKB]+)/([\d.]+[GMKB])\s*\(([\d]+)%\)\s+([\d.]+[GMKB]/s)\s+ETA:([\w:]+)\]");
-        private readonly Regex _summaryRegex = new(@"DOWNLOAD:(\d+)/(\d+)\s+([\d.]+[GMKB])/s\s+ETA:([\w:]+)");
-        private readonly Regex _speedRegex = new(@"([\d.]+)[GMKB]/s");
+        // ── Parse aria2 torrent output ──────────────────────────────────────────
+        private readonly Regex _progressRegex = new(@"\[#\w+\s+([\d.]+[GMKB]+)/([\d.]+[GMKB])\s*\((\d+)%\)\s+([\d.]+[GMKB]+)/s\s+ETA:([\w:]+)");
+        private readonly Regex _summaryRegex = new(@"Summary:");
+        private readonly Regex _filesRegex = new(@"FILE:\d+/(\d+)");
+        private readonly Regex _seedPeerRegex = new(@"Seeds:(\d+)\s+Peers:(\d+)");
+        private readonly Regex _downloadLenRegex = new(@"Length:(\d+)");
+        private readonly Regex _bitfieldRegex = new(@"BitTorrent");
+        private readonly Regex _nameRegex = new(@"Name:([^\n]+)");
+        private readonly Regex _progressBarRegex = new(@"\[#{0,1}[A-Fa-f0-9]+\s+([\d.]+[GMKB]+)/([\d.]+[GMKB])\s*\((\d+)%\)\s+([\d.]+[GMKB]+)/s\s+ETA:([\w:]+)\]");
 
         private void ParseAria2Line(string line)
         {
-            // Skip info lines
-            if (line.Contains("ANALYZE") || line.Contains("Verifying") || line.Contains("OK")) return;
+            if (line.Contains("ANALYZE") || line.Contains("Verifying") || line.Contains("OK") || line.Contains("Loading"))
+                return;
 
-            // Parse progress line: [#abc123 1.2GiB/2.4GiB(50%) 1.5MiB/s ETA:12:34]
-            var match = _progressRegex.Match(line);
-            if (match.Success)
+            var nameMatch = _nameRegex.Match(line);
+            if (nameMatch.Success)
             {
-                string current = match.Groups[1].Value;
-                string total = match.Groups[2].Value;
-                int percent = int.Parse(match.Groups[3].Value);
-                string speed = match.Groups[4].Value;
-                string eta = match.Groups[5].Value;
+                StatusMessageChanged?.Invoke($"Downloading: {nameMatch.Groups[1].Value.Trim()}");
+                return;
+            }
+
+            var dlLenMatch = _downloadLenRegex.Match(line);
+            if (dlLenMatch.Success)
+            {
+                _totalSize = long.Parse(dlLenMatch.Groups[1].Value);
+                return;
+            }
+
+            var filesMatch = _filesRegex.Match(line);
+            if (filesMatch.Success)
+            {
+                _totalFiles = int.Parse(filesMatch.Groups[1].Value);
+                PartDownloadStarted?.Invoke(_completedFiles, _totalFiles);
+                return;
+            }
+
+            var progressMatch = _progressBarRegex.Match(line);
+            if (!progressMatch.Success)
+                progressMatch = _progressRegex.Match(line);
+
+            if (progressMatch.Success)
+            {
+                string currentStr = progressMatch.Groups[1].Value;
+                string totalStr = progressMatch.Groups[2].Value;
+                int percent = int.Parse(progressMatch.Groups[3].Value);
+                string speed = progressMatch.Groups[4].Value;
+                string eta = progressMatch.Groups[5].Value;
 
                 DownloadProgressChanged?.Invoke(percent, $"{speed} - ETA: {eta}");
+
+                long currentBytes = ParseBytes(currentStr);
+                long totalBytes = ParseBytes(totalStr);
+
+                if (totalBytes > 0)
+                {
+                    double totalProgress = ((double)currentBytes / totalBytes) * 100;
+                    TotalDownloadProgressChanged?.Invoke(totalProgress);
+
+                    _totalDownloaded = currentBytes;
+                    _totalSize = totalBytes;
+                }
+                else if (_totalSize > 0)
+                {
+                    double totalProgress = ((double)currentBytes / _totalSize) * 100;
+                    TotalDownloadProgressChanged?.Invoke(totalProgress);
+                }
+
                 return;
             }
 
-            // Parse summary line: DOWNLOAD:5/29 1.5MiB/s ETA:12:34
-            var summaryMatch = _summaryRegex.Match(line);
-            if (summaryMatch.Success)
+            var seedPeerMatch = _seedPeerRegex.Match(line);
+            if (seedPeerMatch.Success)
             {
-                int current = int.Parse(summaryMatch.Groups[1].Value);
-                int total = int.Parse(summaryMatch.Groups[2].Value);
-                string speed = summaryMatch.Groups[3].Value;
-                string eta = summaryMatch.Groups[4].Value;
-
-                _completedFiles = current;
-                _totalFiles = total;
-
-                double totalProgress = ((double)current / total) * 100;
-                TotalDownloadProgressChanged?.Invoke(totalProgress);
-                StatusMessageChanged?.Invoke($"File {current}/{total} - {speed} - ETA: {eta}");
-                PartDownloadStarted?.Invoke(current, total);
+                int seeds = int.Parse(seedPeerMatch.Groups[1].Value);
+                int peers = int.Parse(seedPeerMatch.Groups[2].Value);
+                StatusMessageChanged?.Invoke($"Seeds: {seeds} | Peers: {peers}");
                 return;
             }
 
-            // Parse simple speed line
-            var speedMatch = _speedRegex.Match(line);
-            if (speedMatch.Success && State == LauncherState.Downloading)
+            if (line.Contains("Download complete") || line.Contains("Download Complete"))
             {
-                DownloadProgressChanged?.Invoke(0, $"{speedMatch.Groups[1].Value}{GetSpeedUnit(line)}");
+                _completedFiles++;
+                if (_totalFiles > 0)
+                {
+                    double totalProgress = ((double)_completedFiles / _totalFiles) * 100;
+                    TotalDownloadProgressChanged?.Invoke(totalProgress);
+                    PartDownloadStarted?.Invoke(_completedFiles, _totalFiles);
+                }
+                return;
+            }
+
+            if (line.Contains("used") && line.Contains("MiB") || line.Contains("GiB"))
+            {
+                var speedMatch = Regex.Match(line, @"([\d.]+)\s*([MGK]iB)/s");
+                if (speedMatch.Success)
+                {
+                    string spd = speedMatch.Groups[1].Value;
+                    string unit = speedMatch.Groups[2].Value;
+                    DownloadProgressChanged?.Invoke(0, $"{spd} {unit}/s");
+                }
             }
         }
 
-        private string GetSpeedUnit(string line)
+        private static long ParseBytes(string value)
         {
-            if (line.Contains("MiB/s")) return " MiB/s";
-            if (line.Contains("GiB/s")) return " GiB/s";
-            if (line.Contains("KiB/s")) return " KiB/s";
-            return " B/s";
+            string num = Regex.Match(value, @"[\d.]+").Value;
+            double d = double.Parse(num, System.Globalization.CultureInfo.InvariantCulture);
+            if (value.Contains("GiB")) return (long)(d * 1024 * 1024 * 1024);
+            if (value.Contains("MiB")) return (long)(d * 1024 * 1024);
+            if (value.Contains("KiB")) return (long)(d * 1024);
+            return (long)d;
         }
 
         public void Dispose()
@@ -414,7 +476,7 @@ namespace klauncher
 
             try
             {
-                using var response = await HttpClient.GetAsync(dxUrl);
+                using var response = await _http.GetAsync(dxUrl);
                 response.EnsureSuccessStatusCode();
                 using var fs = new FileStream(dxSetupPath, FileMode.Create, FileAccess.Write);
                 await response.Content.CopyToAsync(fs);
@@ -451,7 +513,7 @@ namespace klauncher
 
             try
             {
-                using var response = await HttpClient.GetAsync(vcUrl);
+                using var response = await _http.GetAsync(vcUrl);
                 response.EnsureSuccessStatusCode();
                 using var fs = new FileStream(vcRedistPath, FileMode.Create, FileAccess.Write);
                 await response.Content.CopyToAsync(fs);
@@ -476,7 +538,5 @@ namespace klauncher
             }
             return false;
         }
-
-        private static readonly HttpClient HttpClient = new();
     }
 }
