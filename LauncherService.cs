@@ -255,26 +255,35 @@ namespace klauncher
         }
 
         // ── Download .torrent file ──────────────────────────────────────────────
-        private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(30) };
+        private static readonly HttpClient _http = new()
+        {
+            Timeout = TimeSpan.FromSeconds(30)
+        };
 
         private async Task<string> EnsureTorrentFileAsync()
         {
-            string localPath = Path.Combine(TorrentDir, "gta-v_legacy.torrent");
+            string bundledPath = Path.Combine(BaseDir, "gta-v_legacy.torrent");
+            if (File.Exists(bundledPath) && new FileInfo(bundledPath).Length > 1000)
+                return bundledPath;
 
+            string localPath = Path.Combine(TorrentDir, "gta-v_legacy.torrent");
             if (File.Exists(localPath) && new FileInfo(localPath).Length > 1000)
                 return localPath;
 
             StatusMessageChanged?.Invoke("Downloading .torrent file...");
             try
             {
+                _http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
                 using var response = await _http.GetAsync(TorrentUrl);
                 response.EnsureSuccessStatusCode();
+                if (!Directory.Exists(TorrentDir)) Directory.CreateDirectory(TorrentDir);
                 using var fs = new FileStream(localPath, FileMode.Create, FileAccess.Write);
                 await response.Content.CopyToAsync(fs);
                 return localPath;
             }
-            catch
+            catch (Exception ex)
             {
+                ErrorOccurred?.Invoke($"Torrent download error: {ex.Message}");
                 return File.Exists(localPath) ? localPath : string.Empty;
             }
         }
