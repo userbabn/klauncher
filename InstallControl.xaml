@@ -154,6 +154,7 @@
                             Margin="10,0,0,0" 
                             Click="BrowseFolder_Click" />
                 </Grid>
+                <TextBlock x:Name="TxtDiskSpace" Text="" Foreground="#2ecc71" FontSize="11" FontFamily="Segoe UI" Margin="0,6,0,0" Visibility="Collapsed"/>
             </StackPanel>
 
             <!-- Space Required Info -->
@@ -187,11 +188,11 @@
 
             <!-- Explanation details -->
             <StackPanel Margin="0,0,0,20">
-                <TextBlock Text="Downloads 29 .rar files and extracts them:" Foreground="#a5a1c0" FontSize="12" FontFamily="Segoe UI" Margin="0,0,0,6"/>
-                <TextBlock Text="• 29 .rar files (part01.rar to part29.rar)" Foreground="#a5a1c0" FontSize="12" Margin="10,0,0,2" FontFamily="Segoe UI"/>
-                <TextBlock Text="• Total size: ~70 GB" Foreground="#a5a1c0" FontSize="12" Margin="10,0,0,2" FontFamily="Segoe UI"/>
-                <TextBlock Text="• Auto-extracts after download" Foreground="#a5a1c0" FontSize="12" Margin="10,0,0,2" FontFamily="Segoe UI"/>
-                <TextBlock Text="• Estimated time: Several hours" Foreground="#a5a1c0" FontSize="12" Margin="10,0,0,2" FontFamily="Segoe UI"/>
+                <TextBlock Text="Downloads GTA V via BitTorrent (P2P):" Foreground="#a5a1c0" FontSize="12" FontFamily="Segoe UI" Margin="0,0,0,6"/>
+                <TextBlock Text="• 140 files (~64 GB) from se7en.ws swarm" Foreground="#a5a1c0" FontSize="12" Margin="10,0,0,2" FontFamily="Segoe UI"/>
+                <TextBlock Text="• Uses aria2 with 512 peers for fast download" Foreground="#a5a1c0" FontSize="12" Margin="10,0,0,2" FontFamily="Segoe UI"/>
+                <TextBlock Text="• setup.exe runs automatically after download" Foreground="#a5a1c0" FontSize="12" Margin="10,0,0,2" FontFamily="Segoe UI"/>
+                <TextBlock Text="• Pause/Resume supported" Foreground="#a5a1c0" FontSize="12" Margin="10,0,0,2" FontFamily="Segoe UI"/>
             </StackPanel>
 
             <!-- Tip -->

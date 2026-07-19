@@ -18,6 +18,7 @@ namespace klauncher
         // Latest ETA from the service – used for Discord updates
         private TimeSpan _lastEta         = TimeSpan.MaxValue;
         private int      _lastDiscordPart = 0;
+        private int      _lastTotalFiles  = 140;
 
         public MainWindow()
         {
@@ -31,8 +32,6 @@ namespace klauncher
             _launcherService.StateChanged                  += OnLauncherStateChanged;
             _launcherService.DownloadProgressChanged       += OnDownloadProgressForDiscord;
             _launcherService.PartDownloadStarted           += OnPartDownloadStarted;
-            _launcherService.ExtractionProgressChanged     += OnExtractionProgressForDiscord;
-            _launcherService.EstimatedTimeRemainingChanged += OnEtaChanged;
 
             // Close-confirmation and cleanup
             Closing += MainWindow_Closing;
@@ -91,8 +90,6 @@ namespace klauncher
             _launcherService.StateChanged                  -= OnLauncherStateChanged;
             _launcherService.DownloadProgressChanged       -= OnDownloadProgressForDiscord;
             _launcherService.PartDownloadStarted           -= OnPartDownloadStarted;
-            _launcherService.ExtractionProgressChanged     -= OnExtractionProgressForDiscord;
-            _launcherService.EstimatedTimeRemainingChanged -= OnEtaChanged;
             _discordService.Dispose();
         }
 
@@ -121,22 +118,12 @@ namespace klauncher
         private void OnPartDownloadStarted(int currentPart, int totalParts)
         {
             _lastDiscordPart = currentPart;
+            _lastTotalFiles = totalParts;
         }
 
         private void OnDownloadProgressForDiscord(double percentage, string speed)
         {
-            // Update Discord with speed + latest ETA
-            _discordService.SetDownloadingState(_lastDiscordPart, 29, speed, _lastEta);
-        }
-
-        private void OnEtaChanged(TimeSpan eta)
-        {
-            _lastEta = eta;
-        }
-
-        private void OnExtractionProgressForDiscord(string currentFile, double percentage)
-        {
-            _discordService.SetExtractingState(percentage);
+            _discordService.SetDownloadingState(_lastDiscordPart, _lastTotalFiles, speed, _lastEta);
         }
 
         // ── Window Controls ────────────────────────────────────────────────────────

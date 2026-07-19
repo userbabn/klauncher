@@ -91,8 +91,8 @@ namespace klauncher
         public void SetDownloadingState(int currentPart, int totalParts, string speed)
         {
             SetPresence(
-                details: "Downloading GTA V VMP Edition",
-                state: $"Part {currentPart}/{totalParts} \u2022 {speed}",
+                details: "Downloading GTA V via Torrent",
+                state: $"File {currentPart}/{totalParts} \u2022 {speed}",
                 largeImageKey: "klauncher_logo",
                 largeImageText: "KLAUNCHER by userbabn",
                 smallImageKey: "gta_logo",
@@ -110,7 +110,7 @@ namespace klauncher
                     : $" \u2022 ~{(int)eta.TotalMinutes}m {eta.Seconds:D2}s");
 
             SetPresence(
-                details: "Downloading GTA V VMP Edition",
+                details: "Downloading GTA V via Torrent",
                 state: $"Part {currentPart}/{totalParts} \u2022 {speed}{etaStr}",
                 largeImageKey: "klauncher_logo",
                 largeImageText: "KLAUNCHER by userbabn",
@@ -136,12 +136,12 @@ namespace klauncher
         public void SetExtractingState(double percentage)
         {
             SetPresence(
-                details: "Extracting GTA V VMP Edition",
-                state: $"Extracting files... {percentage:F0}%",
+                details: "Installing GTA V VMP Edition",
+                state: $"Running setup... {percentage:F0}%",
                 largeImageKey: "klauncher_logo",
                 largeImageText: "KLAUNCHER by userbabn",
                 smallImageKey: "gta_logo",
-                smallImageText: "Extracting RAR..."
+                smallImageText: "Installing..."
             );
         }
 

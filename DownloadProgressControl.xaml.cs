@@ -31,10 +31,8 @@ namespace klauncher
             _launcherService.StateChanged                  += OnStateChanged;
             _launcherService.DownloadProgressChanged       += OnDownloadProgressChanged;
             _launcherService.TotalDownloadProgressChanged  += OnTotalDownloadProgressChanged;
-            _launcherService.ExtractionProgressChanged     += OnExtractionProgressChanged;
             _launcherService.StatusMessageChanged          += OnStatusMessageChanged;
             _launcherService.ErrorOccurred                 += OnErrorOccurred;
-            _launcherService.EstimatedTimeRemainingChanged += OnEstimatedTimeRemainingChanged;
 
             // Start (or resume) installation
             _ = _launcherService.StartDownloadAndInstallAsync(_installPath);
@@ -45,10 +43,8 @@ namespace klauncher
             _launcherService.StateChanged                  -= OnStateChanged;
             _launcherService.DownloadProgressChanged       -= OnDownloadProgressChanged;
             _launcherService.TotalDownloadProgressChanged  -= OnTotalDownloadProgressChanged;
-            _launcherService.ExtractionProgressChanged     -= OnExtractionProgressChanged;
             _launcherService.StatusMessageChanged          -= OnStatusMessageChanged;
             _launcherService.ErrorOccurred                 -= OnErrorOccurred;
-            _launcherService.EstimatedTimeRemainingChanged -= OnEstimatedTimeRemainingChanged;
         }
 
         // ── State Handler ────────────────────────────────────────────────────────
@@ -66,7 +62,7 @@ namespace klauncher
                         BtnPause.IsEnabled         = true;
                         ActiveDotGrid.Visibility   = Visibility.Visible;
                         PausedDotGrid.Visibility   = Visibility.Collapsed;
-                        PulsingDot.Fill            = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString("#00bcd4");
+                        PulsingDot.Fill            = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString("#6f42c1");
                         break;
 
                     case LauncherState.Paused:
@@ -118,40 +114,10 @@ namespace klauncher
             });
         }
 
+        // ── Total Download Progress ────────────────────────────────────────────────
         private void OnTotalDownloadProgressChanged(double totalPercentage)
         {
             Dispatcher.Invoke(() => AnimateProgressBar(TotalProgressBar, totalPercentage));
-        }
-
-        // ── ETA ──────────────────────────────────────────────────────────────────
-        private void OnEstimatedTimeRemainingChanged(TimeSpan eta)
-        {
-            Dispatcher.Invoke(() =>
-            {
-                if (eta == TimeSpan.MaxValue || eta.TotalSeconds <= 0)
-                {
-                    TxtEta.Text = "Calculating...";
-                    return;
-                }
-
-                if (eta.TotalHours >= 1)
-                    TxtEta.Text = $"{(int)eta.TotalHours}h {eta.Minutes:D2}m remaining";
-                else if (eta.TotalMinutes >= 1)
-                    TxtEta.Text = $"{(int)eta.TotalMinutes}m {eta.Seconds:D2}s remaining";
-                else
-                    TxtEta.Text = $"{(int)eta.TotalSeconds}s remaining";
-            });
-        }
-
-        // ── Extraction Progress ──────────────────────────────────────────────────
-        private void OnExtractionProgressChanged(string currentFile, double percentage)
-        {
-            Dispatcher.Invoke(() =>
-            {
-                TxtFileName.Text = currentFile;
-                AnimateProgressBar(FileProgressBar,  percentage);
-                AnimateProgressBar(TotalProgressBar, percentage);
-            });
         }
 
         // ── Status Message ───────────────────────────────────────────────────────
