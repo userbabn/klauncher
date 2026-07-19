@@ -14,6 +14,7 @@ namespace klauncher
         private readonly DiscordService  _discordService;
         private int    _currentNewsSlide = 1;
         private string _installedPath    = @"C:\Games\GTAV_KLAUNCHER";
+        private const string VmpPathFile = "vmp_path.txt";
 
         // Latest ETA from the service – used for Discord updates
         private TimeSpan _lastEta         = TimeSpan.MaxValue;
@@ -170,34 +171,81 @@ namespace klauncher
 
         private void Jugar_Click(object sender, RoutedEventArgs e)
         {
-            string exePath = Path.Combine(_installedPath, "VMP.exe");
-            if (File.Exists(exePath))
+            string exePath = GetSavedVmpPath();
+
+            if (!string.IsNullOrEmpty(exePath) && File.Exists(exePath))
             {
-                try
+                LaunchVmp(exePath);
+                return;
+            }
+
+            // Ask user to pick VMP.exe
+            MessageBoxResult choice = MessageBox.Show(
+                "Select your VMP.exe file to play.\n\n---\n\nفایل VMP.exe خود را برای بازی انتخاب کنید.",
+                "Select VMP.exe", MessageBoxButton.OKCancel, MessageBoxImage.Question);
+
+            if (choice != MessageBoxResult.OK) return;
+
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Select VMP.exe",
+                Filter = "VMP.exe|VMP.exe|All files|*.*",
+                FileName = "VMP.exe"
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                SaveVmpPath(dialog.FileName);
+                LaunchVmp(dialog.FileName);
+            }
+        }
+
+        private void LaunchVmp(string exePath)
+        {
+            try
+            {
+                _discordService.SetPlayingState();
+                Process.Start(new ProcessStartInfo
                 {
-                    _discordService.SetPlayingState();
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName         = exePath,
-                        WorkingDirectory = _installedPath,
-                        UseShellExecute  = true
-                    });
-                    WindowState = WindowState.Minimized;
-                }
-                catch (Exception ex)
+                    FileName         = exePath,
+                    WorkingDirectory = Path.GetDirectoryName(exePath) ?? Path.GetDirectoryName(exePath) ?? "",
+                    UseShellExecute  = true
+                });
+                WindowState = WindowState.Minimized;
+            }
+            catch (Exception ex)
+            {
+                _discordService.SetMenuState();
+                MessageBox.Show($"Error launching game: {ex.Message}\n\nخطا در اجرای بازی: {ex.Message}",
+                    "Execution Error / خطای اجرا", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private static string GetSavedVmpPath()
+        {
+            try
+            {
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, VmpPathFile);
+                if (File.Exists(path))
                 {
-                    _discordService.SetMenuState();
-                    MessageBox.Show($"Error launching game: {ex.Message}\n\nخطا در اجرای بازی: {ex.Message}",
-                        "Execution Error / خطای اجرا", MessageBoxButton.OK, MessageBoxImage.Error);
+                    string saved = File.ReadAllText(path).Trim();
+                    if (!string.IsNullOrEmpty(saved) && File.Exists(saved))
+                        return saved;
                 }
             }
-            else
+            catch { }
+            return string.Empty;
+        }
+
+        private static void SaveVmpPath(string exePath)
+        {
+            try
             {
-                MessageBox.Show(
-                    "Game is not installed or 'VMP.exe' was not found.\nYou will be redirected to the installation screen.\n\n---\n\nبازی نصب نیست یا فایل 'VMP.exe' یافت نشد.\nبه صفحه نصب هدایت خواهید شد.",
-                    "Game not found / بازی یافت نشد", MessageBoxButton.OK, MessageBoxImage.Information);
-                ShowInstallScreen();
+                File.WriteAllText(
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, VmpPathFile),
+                    exePath);
             }
+            catch { }
         }
 
         // ── Navigation ──────────────────────────────────────────────────────────────
