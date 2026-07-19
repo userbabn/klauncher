@@ -299,9 +299,6 @@ namespace klauncher
                 $"\"{torrentPath}\""
             };
 
-            if (File.Exists(Aria2Conf))
-                args.Add($"--conf-path=\"{Aria2Conf}\"");
-
             var startInfo = new ProcessStartInfo
             {
                 FileName = Aria2Path,
@@ -336,8 +333,8 @@ namespace klauncher
             }
         }
 
-        private static readonly Regex ProgressRegex = new(@"\[#{0,1}[A-Fa-f0-9]+\s+([\d.]+[GMKB]+)/([\d.]+[GMKB])\s*\((\d+)%\)\s+([\d.]+[GMKB]+)/s\s+ETA:([\w:]+)\]");
-        private static readonly Regex FilesRegex = new(@"FILE:(\d+)/(\d+)");
+        private static readonly Regex ProgressRegex = new(@"\[#[a-f0-9]+\s+([\d.]+[GMK]iB)/([\d.]+[GMK]iB)\((\d+)%\)\s+CN:\d+\s+SD:\d+\s+DL:([\d.]+[GMK]iB)\s+ETA:([\w:]+)\]");
+        private static readonly Regex FilesRegex = new(@"FILE:[^\(]+\((\d+)more\)");
         private static readonly Regex SizeRegex = new(@"Length:(\d+)");
         private static readonly Regex SpeedLineRegex = new(@"([\d.]+)\s*([MGK]iB)/s");
 
@@ -353,10 +350,12 @@ namespace klauncher
                 return;
             }
 
+            // FILE: path/to/file.bin (139more)
             var filesMatch = FilesRegex.Match(line);
             if (filesMatch.Success)
             {
-                _totalFiles = int.Parse(filesMatch.Groups[2].Value);
+                int remaining = int.Parse(filesMatch.Groups[1].Value);
+                _totalFiles = remaining + 1;
                 PartDownloadStarted?.Invoke(_completedFiles, _totalFiles);
                 return;
             }
@@ -368,7 +367,7 @@ namespace klauncher
                 string speed = progressMatch.Groups[4].Value;
                 string eta = progressMatch.Groups[5].Value;
 
-                DownloadProgressChanged?.Invoke(percent, $"{speed} - ETA: {eta}");
+                DownloadProgressChanged?.Invoke(percent, $"{speed}/s - ETA: {eta}");
 
                 long currentBytes = ParseBytes(progressMatch.Groups[1].Value);
                 long totalBytes = ParseBytes(progressMatch.Groups[2].Value);
@@ -377,10 +376,6 @@ namespace klauncher
                 {
                     _totalSize = totalBytes;
                     TotalDownloadProgressChanged?.Invoke((double)currentBytes / totalBytes * 100);
-                }
-                else if (_totalSize > 0)
-                {
-                    TotalDownloadProgressChanged?.Invoke((double)currentBytes / _totalSize * 100);
                 }
                 return;
             }

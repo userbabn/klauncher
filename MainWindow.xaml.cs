@@ -55,7 +55,7 @@ namespace klauncher
             {
                 DownloadStatusBar.Visibility = Visibility.Visible;
                 StatusText.Text = $"Resuming download ({saved.CompletedFiles + 1}/{saved.TotalFiles})...";
-                StatusDot.Fill = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString("#00bcd4");
+                StatusDot.Fill = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString("#00bcd4")!;
 
                 ShowInstallScreen();
                 InstallCtrl_StartInstallation(saved.TargetFolder);

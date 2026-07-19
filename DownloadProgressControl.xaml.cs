@@ -62,7 +62,7 @@ namespace klauncher
                         BtnPause.IsEnabled         = true;
                         ActiveDotGrid.Visibility   = Visibility.Visible;
                         PausedDotGrid.Visibility   = Visibility.Collapsed;
-                        PulsingDot.Fill            = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString("#6f42c1");
+                        PulsingDot.Fill            = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString("#6f42c1")!;
                         break;
 
                     case LauncherState.Paused:
@@ -84,7 +84,7 @@ namespace klauncher
                         TxtEta.Text                = "";
                         ActiveDotGrid.Visibility   = Visibility.Visible;
                         PausedDotGrid.Visibility   = Visibility.Collapsed;
-                        PulsingDot.Fill            = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString("#2ecc71");
+                        PulsingDot.Fill            = (System.Windows.Media.Brush)new System.Windows.Media.BrushConverter().ConvertFromString("#2ecc71")!;
                         break;
 
                     case LauncherState.Completed:
