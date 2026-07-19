@@ -14,8 +14,11 @@ obj/
 *.nupkg
 packages/
 
-# Publish artifacts (don't track compiled binaries in source)
-bin/Release/net10.0-windows/win-x64/publish/
+# Publish artifacts
+publish_x64/
+publish_x86/
+KLauncher_x64.zip
+KLauncher_x86.zip
 
 # Temporary download state file (generated at runtime)
 download_state.json
